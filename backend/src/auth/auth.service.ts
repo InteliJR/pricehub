@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { TokenRevocationService } from '../token-revocation/token-revocation.service';
@@ -12,21 +12,43 @@ export class AuthService {
     private tokenRevocationService: TokenRevocationService,
   ) {}
 
+  /**
+   * Registro de usuário
+   * IMPORTANTE: Usuários são criados INATIVOS por padrão
+   * Apenas ADMIN pode ativá-los posteriormente
+   */
   async register(email: string, name: string, password: string, role?: UserRole) {
-    const user = await this.usersService.create(email, name, password, role);
-    const tokens = await this.generateTokens(user.id, user.email, user.role);
+    // SEGURANÇA: Bloquear criação de ADMIN via registro público
+    if (role === UserRole.ADMIN) {
+      throw new ForbiddenException('Não é permitido criar usuários ADMIN via registro');
+    }
 
+    // Criar usuário INATIVO por padrão
+    const user = await this.usersService.create(
+      email, 
+      name, 
+      password, 
+      role || UserRole.COMERCIAL,
+      false // isActive = false
+    );
+
+    // Não retornar tokens - usuário precisa ser ativado primeiro
     return {
       user,
-      ...tokens,
+      message: 'Usuário criado com sucesso. Aguarde ativação por um administrador.',
     };
   }
 
   async login(email: string, password: string) {
     const user = await this.usersService.findByEmail(email);
 
-    if (!user || !user.isActive) {
+    if (!user) {
       throw new UnauthorizedException('Credenciais inválidas');
+    }
+
+    // CRÍTICO: Verificar se usuário está ativo
+    if (!user.isActive) {
+      throw new UnauthorizedException('Usuário inativo. Entre em contato com o administrador.');
     }
 
     const isPasswordValid = await this.usersService.validatePassword(
@@ -53,7 +75,14 @@ export class AuthService {
   }
 
   async validateUser(userId: string) {
-    return this.usersService.findById(userId);
+    const user = await this.usersService.findById(userId);
+    
+    // Verificar se usuário ainda está ativo
+    if (!user.isActive) {
+      throw new UnauthorizedException('Usuário foi desativado');
+    }
+    
+    return user;
   }
 
   private async generateTokens(userId: string, email: string, role: UserRole) {
@@ -83,6 +112,12 @@ export class AuthService {
       const payload = await this.jwtService.verifyAsync(refreshToken, {
         secret: process.env.JWT_REFRESH_SECRET || 'refresh-secret-key',
       });
+
+      // Verificar se usuário ainda está ativo
+      const user = await this.usersService.findById(payload.sub);
+      if (!user.isActive) {
+        throw new UnauthorizedException('Usuário foi desativado');
+      }
 
       return this.generateTokens(payload.sub, payload.email, payload.role);
     } catch {

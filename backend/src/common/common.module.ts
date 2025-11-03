@@ -1,4 +1,10 @@
-import { Module } from '@nestjs/common';
+// src/common/common.module.ts
+import { Module, Global } from '@nestjs/common';
+import { RolesGuard } from './guards/roles.guard';
 
-@Module({})
+@Global()
+@Module({
+  providers: [RolesGuard],
+  exports: [RolesGuard],
+})
 export class CommonModule {}

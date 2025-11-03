@@ -67,7 +67,7 @@ export function Sidebar() {
     <aside className="hidden w-64 flex-col border-r bg-gray-800 p-4 md:flex">
       <div className="flex h-16 items-center gap-2 px-3 text-white">
         <Building className="h-6 w-6" />
-        <span className="text-xl font-semibold">Precificação</span>
+        <span className="text-xl font-semibold">GR Water</span>
       </div>
       <nav className="flex flex-1 flex-col gap-1 mt-4">
         {accessibleNavItems.map((item) => (
