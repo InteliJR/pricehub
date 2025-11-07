@@ -75,7 +75,10 @@ export class AuthService {
   private async generateTokens(userId: string, email: string, role: UserRole) {
     const payload = { sub: userId, email, role };
 
+    // Access token usa a configuração padrão do módulo (15min)
     const accessToken = await this.jwtService.signAsync(payload);
+    
+    // Refresh token tem secret e expiração próprios
     const refreshToken = await this.jwtService.signAsync(payload, {
       secret: process.env.JWT_REFRESH_SECRET || 'refresh-secret-key',
       expiresIn: '7d',
@@ -86,22 +89,37 @@ export class AuthService {
 
   async refreshTokens(refreshToken: string) {
     try {
+      // 1. Verificar se está na blacklist
       const isRevoked = await this.tokenRevocationService.isTokenRevoked(refreshToken);
       if (isRevoked) {
         throw new UnauthorizedException('Token revogado');
       }
 
+      // 2. Validar e decodificar o refresh token
       const payload = await this.jwtService.verifyAsync(refreshToken, {
         secret: process.env.JWT_REFRESH_SECRET || 'refresh-secret-key',
       });
 
+      // 3. Verificar se usuário ainda está ativo
       const user = await this.usersService.findById(payload.sub);
       if (!user.isActive) {
         throw new UnauthorizedException('Usuário foi desativado');
       }
 
+      // 4. Revogar o refresh token antigo (rotation)
+      const decoded = this.jwtService.decode(refreshToken) as any;
+      if (decoded && decoded.exp) {
+        const expiresAt = new Date(decoded.exp * 1000);
+        await this.tokenRevocationService.revokeToken(refreshToken, payload.sub, expiresAt);
+      }
+
+      // 5. Gerar novos tokens
       return this.generateTokens(payload.sub, payload.email, payload.role);
-    } catch {
+    } catch (error) {
+      // Preservar mensagens específicas de UnauthorizedException
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
       throw new UnauthorizedException('Refresh token inválido');
     }
   }
@@ -126,19 +144,12 @@ export class AuthService {
     }
   }
 
-  /**
-   * NOTA: Esta implementação assume que você armazena uma "versão de token"
-   * no usuário. Alternativa: adicionar campo `tokenVersion` no User model
-   * e incrementá-lo aqui, depois validar no JWT strategy.
-   * 
-   * Solução mais simples (atual): Marcar um flag que invalida todos os tokens
-   */
   async logoutAllDevices(userId: string) {
-
-    
+    // Implementação básica - tokens serão invalidados naturalmente
+    // Para invalidação imediata, implemente tokenVersion no User model
     return { 
       message: 'Sessões encerradas. Tokens refresh serão invalidados na próxima tentativa de uso.',
-      note: 'Implemente tokenVersion para invalidação imediata'
+      note: 'Para invalidação imediata, implemente tokenVersion no User model'
     };
   }
 }
