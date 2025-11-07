@@ -38,7 +38,7 @@ export class AuthController {
     return this.authService.login(loginDto.email, loginDto.password);
   }
 
-  // Refresh: 10 tentativas por minuto
+  // Apenas valida o refreshToken internamente
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
@@ -56,6 +56,14 @@ export class AuthController {
     @Body('refreshToken') refreshToken: string,
   ) {
     return this.authService.logout(req.user.id, refreshToken);
+  }
+
+  @SkipThrottle()
+  @UseGuards(JwtAuthGuard)
+  @Post('logout-all')
+  @HttpCode(HttpStatus.OK)
+  async logoutAll(@Request() req: any) {
+    return this.authService.logoutAllDevices(req.user.id);
   }
 
   // Perfil: sem rate limiting (usuário autenticado)

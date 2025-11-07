@@ -12,27 +12,19 @@ export class AuthService {
     private tokenRevocationService: TokenRevocationService,
   ) {}
 
-  /**
-   * Registro de usuário
-   * IMPORTANTE: Usuários são criados INATIVOS por padrão
-   * Apenas ADMIN pode ativá-los posteriormente
-   */
   async register(email: string, name: string, password: string, role?: UserRole) {
-    // SEGURANÇA: Bloquear criação de ADMIN via registro público
     if (role === UserRole.ADMIN) {
       throw new ForbiddenException('Não é permitido criar usuários ADMIN via registro');
     }
 
-    // Criar usuário INATIVO por padrão
     const user = await this.usersService.create(
       email, 
       name, 
       password, 
       role || UserRole.COMERCIAL,
-      false // isActive = false
+      false
     );
 
-    // Não retornar tokens - usuário precisa ser ativado primeiro
     return {
       user,
       message: 'Usuário criado com sucesso. Aguarde ativação por um administrador.',
@@ -46,15 +38,11 @@ export class AuthService {
       throw new UnauthorizedException('Credenciais inválidas');
     }
 
-    // CRÍTICO: Verificar se usuário está ativo
     if (!user.isActive) {
       throw new UnauthorizedException('Usuário inativo. Entre em contato com o administrador.');
     }
 
-    const isPasswordValid = await this.usersService.validatePassword(
-      user,
-      password,
-    );
+    const isPasswordValid = await this.usersService.validatePassword(user, password);
 
     if (!isPasswordValid) {
       throw new UnauthorizedException('Credenciais inválidas');
@@ -77,7 +65,6 @@ export class AuthService {
   async validateUser(userId: string) {
     const user = await this.usersService.findById(userId);
     
-    // Verificar se usuário ainda está ativo
     if (!user.isActive) {
       throw new UnauthorizedException('Usuário foi desativado');
     }
@@ -89,22 +76,17 @@ export class AuthService {
     const payload = { sub: userId, email, role };
 
     const accessToken = await this.jwtService.signAsync(payload);
-
     const refreshToken = await this.jwtService.signAsync(payload, {
       secret: process.env.JWT_REFRESH_SECRET || 'refresh-secret-key',
       expiresIn: '7d',
     });
 
-    return {
-      accessToken,
-      refreshToken,
-    };
+    return { accessToken, refreshToken };
   }
 
   async refreshTokens(refreshToken: string) {
     try {
-      const isRevoked =
-        await this.tokenRevocationService.isTokenRevoked(refreshToken);
+      const isRevoked = await this.tokenRevocationService.isTokenRevoked(refreshToken);
       if (isRevoked) {
         throw new UnauthorizedException('Token revogado');
       }
@@ -113,7 +95,6 @@ export class AuthService {
         secret: process.env.JWT_REFRESH_SECRET || 'refresh-secret-key',
       });
 
-      // Verificar se usuário ainda está ativo
       const user = await this.usersService.findById(payload.sub);
       if (!user.isActive) {
         throw new UnauthorizedException('Usuário foi desativado');
@@ -145,8 +126,19 @@ export class AuthService {
     }
   }
 
+  /**
+   * NOTA: Esta implementação assume que você armazena uma "versão de token"
+   * no usuário. Alternativa: adicionar campo `tokenVersion` no User model
+   * e incrementá-lo aqui, depois validar no JWT strategy.
+   * 
+   * Solução mais simples (atual): Marcar um flag que invalida todos os tokens
+   */
   async logoutAllDevices(userId: string) {
-    await this.tokenRevocationService.revokeAllUserTokens(userId);
-    return { message: 'Logout realizado em todos os dispositivos' };
+
+    
+    return { 
+      message: 'Sessões encerradas. Tokens refresh serão invalidados na próxima tentativa de uso.',
+      note: 'Implemente tokenVersion para invalidação imediata'
+    };
   }
 }

@@ -308,17 +308,33 @@ apiClient.interceptors.response.use(
 import { ButtonHTMLAttributes, forwardRef } from 'react';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
+import { Slot } from '@radix-ui/react-slot';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
+  asChild?: boolean;
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'primary', size = 'md', isLoading, children, disabled, ...props }, ref) => {
+  (
+    {
+      className,
+      variant = 'primary',
+      size = 'md',
+      isLoading,
+      children,
+      disabled,
+      asChild = false,
+      ...props
+    },
+    ref
+  ) => {
+    const Comp = asChild ? Slot : 'button';
+
     return (
-      <button
+      <Comp
         ref={ref}
         disabled={disabled || isLoading}
         className={cn(
@@ -326,9 +342,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
           'disabled:pointer-events-none disabled:opacity-50',
           {
-            'bg-primary-600 text-white hover:bg-primary-700 focus-visible:ring-primary-600': variant === 'primary',
-            'bg-gray-100 text-gray-900 hover:bg-gray-200 focus-visible:ring-gray-500': variant === 'secondary',
-            'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-600': variant === 'danger',
+            'bg-primary-600 text-white hover:bg-primary-700 focus-visible:ring-primary-600':
+              variant === 'primary',
+            'bg-gray-100 text-gray-900 hover:bg-gray-200 focus-visible:ring-gray-500':
+              variant === 'secondary',
+            'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-600':
+              variant === 'danger',
             'hover:bg-gray-100 text-gray-700': variant === 'ghost',
             'h-9 px-3 text-sm': size === 'sm',
             'h-10 px-4 text-sm': size === 'md',
@@ -338,9 +357,15 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         )}
         {...props}
       >
-        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        {children}
-      </button>
+        {asChild ? (
+          children
+        ) : (
+          <>
+            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {children}
+          </>
+        )}
+      </Comp>
     );
   }
 );
@@ -511,22 +536,88 @@ export function LoadingSpinner({ size = 'md', className }: LoadingSpinnerProps) 
 }
 """
 
+# src\components\layout\Header.tsx
+
+"""
+// src/components/layout/Header.tsx
+import { Link, useNavigate } from 'react-router-dom';
+import { LogOut, User } from 'lucide-react';
+import { useAuthStore } from '@/store/authStore';
+import { logout as apiLogout } from '@/api/auth';
+import { Button } from '@/components/common/Button';
+
+export function Header() {
+  const { user, logout: storeLogout, refreshToken } = useAuthStore();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      if (refreshToken) {
+        // Notifica o backend para invalidar o token
+        await apiLogout(refreshToken);
+      }
+    } catch (error) {
+      console.error('Falha ao fazer logout no servidor:', error);
+    } finally {
+      // Limpa o estado local e redireciona
+      storeLogout();
+      navigate('/login');
+    }
+  };
+
+  return (
+    <header className="flex h-16 items-center border-b bg-white px-6">
+      {/* Futuramente, você pode usar um store/context 
+        para exibir o título da página aqui 
+      */}
+      <div className="flex-1">
+        <h1 className="text-lg font-semibold"></h1>
+      </div>
+      
+      <div className="flex items-center gap-4">
+        <div className="text-right">
+          <p className="text-sm font-medium text-gray-900">{user?.name}</p>
+          <p className="text-xs text-gray-500">{user?.email}</p>
+        </div>
+
+        {/* NOTA: Você precisará de um componente DropdownMenu. 
+          Enquanto não o cria, pode usar um botão de Link simples.
+          Vou usar um botão simples por enquanto.
+        */}
+        <Button variant="ghost" size="sm" asChild>
+          <Link to="/perfil">
+            <User className="h-4 w-4" />
+          </Link>
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleLogout}
+          title="Sair"
+        >
+          <LogOut className="h-4 w-4 text-red-600" />
+        </Button>
+      </div>
+    </header>
+  );
+}
+"""
+
 # src\components\layout\Layout.tsx
 
 """
-// src/components/layout/Layout.tsx
+// src/components/layout/Layout.tsx (Atualizado)
 import { Outlet } from 'react-router-dom';
-// Você pode importar seu Header e Sidebar aqui quando eles estiverem prontos
-// import { Header } from './Header';
-// import { Sidebar } from './Sidebar';
+import { Header } from './Header';
+import { Sidebar } from './Sidebar';
 
 export function Layout() {
   return (
-    <div className="flex h-screen">
-      {/* <Sidebar /> */}
-      <div className="flex-1 flex flex-col">
-        {/* <Header /> */}
-        <main className="flex-1 p-6">
+    <div className="flex h-screen bg-gray-50">
+      <Sidebar />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Header />
+        <main className="flex-1 p-6 overflow-y-auto">
           <Outlet /> {/* As páginas (Products, Users, etc.) serão renderizadas aqui */}
         </main>
       </div>
@@ -558,6 +649,99 @@ export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
   }
   
   return <Outlet />;
+}
+"""
+
+# src\components\layout\Sidebar.tsx
+
+"""
+// src/components/layout/Sidebar.tsx
+import { NavLink } from 'react-router-dom';
+import {
+  Boxes,
+  Component,
+  Landmark,
+  Truck,
+  PieChart,
+  Users,
+  Building,
+} from 'lucide-react';
+import { useAuthStore } from '@/store/authStore';
+import { cn } from '@/lib/utils';
+import type { UserRole } from '@/types/api';
+
+const navItems = [
+  {
+    label: 'Produtos',
+    path: '/produtos',
+    icon: Boxes,
+    allowedRoles: ['ADMIN', 'COMERCIAL'],
+  },
+  {
+    label: 'Matérias-primas',
+    path: '/materias-primas',
+    icon: Component,
+    allowedRoles: ['ADMIN', 'COMERCIAL', 'IMPOSTO'],
+  },
+  {
+    label: 'Premissas',
+    path: '/premissas',
+    icon: Landmark,
+    allowedRoles: ['ADMIN', 'IMPOSTO', 'COMERCIAL'],
+  },
+  {
+    label: 'Frete',
+    path: '/frete',
+    icon: Truck,
+    allowedRoles: ['ADMIN', 'LOGISTICA'],
+  },
+  {
+    label: 'Custos Fixos',
+    path: '/custos-fixos',
+    icon: PieChart,
+    allowedRoles: ['ADMIN'],
+  },
+  {
+    label: 'Usuários',
+    path: '/usuarios',
+    icon: Users,
+    allowedRoles: ['ADMIN'],
+  },
+];
+
+export function Sidebar() {
+  const { user } = useAuthStore();
+
+  const accessibleNavItems = navItems.filter(
+    (item) => user && item.allowedRoles.includes(user.role)
+  );
+
+  const baseLinkClass =
+    'flex items-center gap-3 rounded-lg px-3 py-2 text-gray-300 transition-all hover:text-white hover:bg-gray-700';
+  const activeLinkClass = 'bg-gray-700 text-white';
+
+  return (
+    <aside className="hidden w-64 flex-col border-r bg-gray-800 p-4 md:flex">
+      <div className="flex h-16 items-center gap-2 px-3 text-white">
+        <Building className="h-6 w-6" />
+        <span className="text-xl font-semibold">GR Water</span>
+      </div>
+      <nav className="flex flex-1 flex-col gap-1 mt-4">
+        {accessibleNavItems.map((item) => (
+          <NavLink
+            key={item.path}
+            to={item.path}
+            className={({ isActive }) =>
+              cn(baseLinkClass, isActive && activeLinkClass)
+            }
+          >
+            <item.icon className="h-4 w-4" />
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
+    </aside>
+  );
 }
 """
 
@@ -725,6 +909,34 @@ export const userSchema = z.object({
 });
 """
 
+# src\pages\FixedCosts.tsx
+
+"""
+// src/pages/Products.tsx
+export default function FixedCosts() {
+  return (
+    <div>
+      <h1>Custos Fixos</h1>
+      <p>Página em construção...</p>
+    </div>
+  );
+}
+"""
+
+# src\pages\Freights.tsx
+
+"""
+// src/pages/Products.tsx
+export default function Freights() {
+  return (
+    <div>
+      <h1>Premissas</h1>
+      <p>Página em construção...</p>
+    </div>
+  );
+}
+"""
+
 # src\pages\Login.tsx
 
 """
@@ -795,14 +1007,25 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex">
-      {/* Logo Section */}
+      {/* ===========================================
+        Logo Section (Desktop)
+        - 'hidden' (escondido por padrão)
+        - 'lg:flex' (exibido como flex em telas 'lg' 1024px ou maiores)
+        ===========================================
+      */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 to-blue-800 items-center justify-center p-12">
         <div className="text-center">
-          <div className="w-64 h-64 mx-auto mb-8">
-            {/* Placeholder para logo */}
-            <div className="w-full h-full bg-white/10 rounded-3xl flex items-center justify-center">
-              <span className="text-white text-6xl font-bold">LOGO</span>
-            </div>
+          {/* LOGO GRANDE AJUSTADA:
+            - Removido o 'w-64 h-64' fixo.
+            - 'w-full' e 'max-w-lg' (512px) fazem ela ser grande e responsiva.
+            - 'mb-10' para dar mais espaço.
+          */}
+          <div className="rounded-3xl bg-gray-100/30 p-4 pb-6 mb-6">
+              <img
+                src="/logo_symbol_and_letters_light.png"
+                alt="Logo Sistema de Precificação"
+                className="w-full max-w-lg mx-auto"
+              />
           </div>
           <h1 className="text-white text-4xl font-bold mb-4">
             Sistema de Precificação
@@ -813,13 +1036,23 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Login Form Section */}
+      {/* ===========================================
+        Login Form Section (Mobile e Desktop)
+        - 'flex-1' (ocupa o espaço restante, 100% em mobile, 50% em desktop)
+        ===========================================
+      */}
       <div className="flex-1 flex items-center justify-center p-8 bg-gray-50">
         <div className="w-full max-w-md">
-          {/* Mobile Logo */}
+          {/* Mobile Logo (como no seu screenshot)
+            - 'lg:hidden' (exibido apenas em telas menores que 'lg' 1024px)
+          */}
           <div className="lg:hidden text-center mb-8">
-            <div className="w-20 h-20 mx-auto mb-4 bg-blue-600 rounded-2xl flex items-center justify-center">
-              <span className="text-white text-3xl font-bold">L</span>
+            <div className="w-32 h-32 mx-auto mb-4  rounded-2xl flex items-center justify-center p-3">
+              <img
+                src="/logo_symbol.png"
+                alt="Logo"
+                className="w-full h-full object-contain"
+              />
             </div>
             <h2 className="text-2xl font-bold text-gray-900">
               Sistema de Precificação
@@ -827,7 +1060,7 @@ export default function Login() {
           </div>
 
           <div className="bg-white rounded-2xl shadow-lg p-8">
-            <div className="mb-8">
+            <div className="mb-8 text-center lg:text-left">
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
                 Acesse sua conta
               </h2>
@@ -902,6 +1135,34 @@ export default function Login() {
 }
 """
 
+# src\pages\NotFound.tsx
+
+"""
+import { Link } from 'react-router-dom';
+import { Button } from '@/components/common/Button';
+
+export default function NotFound() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="text-center">
+        <h1 className="text-9xl font-bold text-gray-200">404</h1>
+        <div className="mt-4">
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">
+            Página não encontrada
+          </h2>
+          <p className="text-gray-600 mb-8">
+            A página que você está procurando não existe ou foi movida.
+          </p>
+          <Link to="/">
+            <Button variant="primary">Voltar para o início</Button>
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+"""
+
 # src\pages\Products.tsx
 
 """
@@ -910,6 +1171,62 @@ export default function Products() {
   return (
     <div>
       <h1>Produtos</h1>
+      <p>Página em construção...</p>
+    </div>
+  );
+}
+"""
+
+# src\pages\Profile.tsx
+
+"""
+// src/pages/Products.tsx
+export default function Profile() {
+  return (
+    <div>
+      <h1>Perfil</h1>
+      <p>Página em construção...</p>
+    </div>
+  );
+}
+"""
+
+# src\pages\RawMaterials.tsx
+
+"""
+// src/pages/Products.tsx
+export default function RawMaterials() {
+  return (
+    <div>
+      <h1>Matéria Prima</h1>
+      <p>Página em construção...</p>
+    </div>
+  );
+}
+"""
+
+# src\pages\Taxes.tsx
+
+"""
+// src/pages/Products.tsx
+export default function Profile() {
+  return (
+    <div>
+      <h1>Perfil</h1>
+      <p>Página em construção...</p>
+    </div>
+  );
+}
+"""
+
+# src\pages\Users.tsx
+
+"""
+// src/pages/Products.tsx
+export default function Users() {
+  return (
+    <div>
+      <h1>Usuários</h1>
       <p>Página em construção...</p>
     </div>
   );
