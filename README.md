@@ -12,7 +12,7 @@ Acesse a solução por meio deste [🔗 Link](https://www.nasa.gov/)
 
 ## 📄 Documentação
 
-A documentação completa do projeto pode ser acessada através deste **[link](https://intelijr.github.io/data_analysis/)**
+A documentação completa do projeto pode ser acessada através deste **[link](https://intelijr.github.io/pricehub/)**
 
 > A documentação é mantida utilizando o [Docusaurus](https://docusaurus.io/). Para informações sobre como configurar e manter a documentação, consulte o [guia de configuração](./docs/README.md).
 
