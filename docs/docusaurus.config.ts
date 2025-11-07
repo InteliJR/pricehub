@@ -6,10 +6,10 @@ import type * as Preset from "@docusaurus/preset-classic";
 
 const config: Config = {
   // Ajustar com o nome do projeto
-  title: "Data Analysis Docs",
-  baseUrl: "/data_analysis/",
-  projectName: "data_analysis",
-  tagline: "Documentação do projeto Data Analysis",
+  title: "GR Water Solutions Docs",
+  baseUrl: "/pricehub/",
+  projectName: "pricehub",
+  tagline: "Documentação do projeto GR Water Solutions",
 
 
   favicon: "img/favicon.ico",
@@ -61,7 +61,7 @@ const config: Config = {
     footer: {
       style: "dark",
 
-      copyright: `Copyright © ${new Date().getFullYear()} NovoProjeto, Inc. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} GR Water Solutions, Inc. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,
