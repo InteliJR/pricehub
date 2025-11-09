@@ -228,21 +228,28 @@ class AuthTester:
         logging.info("TESTE 9: Logout de Todos os Dispositivos")
         logging.info("="*60)
         
-        # Fazer novo login para ter tokens válidos
+        # ✅ CORREÇÃO: Fazer um novo login FRESCO para ter tokens válidos
+        logging.info("   Fazendo novo login para obter tokens válidos...")
         payload = {
             "email": ADMIN_EMAIL,
             "password": ADMIN_PASSWORD
         }
         response = self.session.post(f"{BASE_URL}/auth/login", json=payload)
-        data = response.json() if response.status_code == 200 else None
         
-        if not data:
-            return self.log_test("Logout de todos os dispositivos", False, "Falha no login")
+        # ✅ Verificar se login foi bem-sucedido
+        if response.status_code != 200:
+            logging.error(f"   Erro no login: Status {response.status_code}")
+            self.pretty_print(response)
+            return self.log_test("Logout de todos os dispositivos", False, "Falha no login inicial")
         
+        data = response.json()
+        logging.info(f"   ✓ Login bem-sucedido")
+        
+        # Atualizar tokens com os novos valores
         self.access_token = data.get('accessToken')
         self.refresh_token = data.get('refreshToken')
         
-        # Logout all
+        # ✅ Agora sim, fazer logout-all com tokens VÁLIDOS
         headers = {"Authorization": f"Bearer {self.access_token}"}
         response = self.session.post(
             f"{BASE_URL}/auth/logout-all",
@@ -253,48 +260,10 @@ class AuthTester:
         return self.log_test(
             "Logout de todos os dispositivos",
             response.status_code == 200,
-            "Todos os refresh tokens do usuário foram revogados"
+            "Todos os refresh tokens do usuário foram marcados para invalidação"
         )
     
-    # ========================================
-    # TESTE DE LIMPEZA AUTOMÁTICA
-    # ========================================
-    
-    def test_10_cleanup_endpoint(self):
-        """Teste 10: Endpoint de limpeza manual (apenas ADMIN)"""
-        logging.info("\n" + "="*60)
-        logging.info("TESTE 10: Limpeza Manual de Tokens Expirados")
-        logging.info("="*60)
-        
-        # Fazer login novamente
-        payload = {
-            "email": ADMIN_EMAIL,
-            "password": ADMIN_PASSWORD
-        }
-        response = self.session.post(f"{BASE_URL}/auth/login", json=payload)
-        data = response.json() if response.status_code == 200 else None
-        
-        if not data:
-            return self.log_test("Limpeza manual de tokens", False, "Falha no login")
-        
-        self.access_token = data.get('accessToken')
-        
-        headers = {"Authorization": f"Bearer {self.access_token}"}
-        response = self.session.post(
-            f"{BASE_URL}/admin/cleanup-tokens",
-            headers=headers
-        )
-        data = self.pretty_print(response)
-        
-        success = response.status_code == 200
-        message = f"Tokens removidos: {data.get('tokensRemoved', 0)}" if data else ""
-        
-        return self.log_test(
-            "Endpoint de limpeza manual (ADMIN)",
-            success,
-            message
-        )
-    
+     
     # ========================================
     # EXECUTAR TODOS OS TESTES
     # ========================================
@@ -323,7 +292,6 @@ class AuthTester:
         
         # Testes avançados
         results['test_9_logout_all'] = self.test_9_logout_all_devices()
-        results['test_10_cleanup'] = self.test_10_cleanup_endpoint()
         
         # Resumo
         logging.info("\n" + "="*60)

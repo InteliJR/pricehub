@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { TokenRevocationService } from '../token-revocation/token-revocation.service';
 import { UserRole } from '@prisma/client';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -73,13 +74,30 @@ export class AuthService {
   }
 
   private async generateTokens(userId: string, email: string, role: UserRole) {
-    const payload = { sub: userId, email, role };
+    // ✅ Adicionar jti (JWT ID) único para garantir tokens diferentes
+    const jti = randomBytes(16).toString('hex');
+    
+    const payload = { 
+      sub: userId, 
+      email, 
+      role,
+      jti // Identificador único do token
+    };
 
     // Access token usa a configuração padrão do módulo (15min)
     const accessToken = await this.jwtService.signAsync(payload);
     
+    // ✅ Refresh token com JTI diferente para garantir unicidade
+    const refreshJti = randomBytes(16).toString('hex');
+    const refreshPayload = {
+      sub: userId,
+      email,
+      role,
+      jti: refreshJti
+    };
+    
     // Refresh token tem secret e expiração próprios
-    const refreshToken = await this.jwtService.signAsync(payload, {
+    const refreshToken = await this.jwtService.signAsync(refreshPayload, {
       secret: process.env.JWT_REFRESH_SECRET || 'refresh-secret-key',
       expiresIn: '7d',
     });
@@ -106,15 +124,17 @@ export class AuthService {
         throw new UnauthorizedException('Usuário foi desativado');
       }
 
-      // 4. Revogar o refresh token antigo (rotation)
+      // 4. Revogar o refresh token antigo ANTES de gerar o novo
       const decoded = this.jwtService.decode(refreshToken) as any;
       if (decoded && decoded.exp) {
         const expiresAt = new Date(decoded.exp * 1000);
         await this.tokenRevocationService.revokeToken(refreshToken, payload.sub, expiresAt);
       }
 
-      // 5. Gerar novos tokens
-      return this.generateTokens(payload.sub, payload.email, payload.role);
+      // 5. Gerar novos tokens (com novos JTIs únicos)
+      const newTokens = await this.generateTokens(payload.sub, payload.email, payload.role);
+      
+      return newTokens;
     } catch (error) {
       // Preservar mensagens específicas de UnauthorizedException
       if (error instanceof UnauthorizedException) {
@@ -126,9 +146,15 @@ export class AuthService {
 
   async logout(userId: string, refreshToken: string) {
     try {
+      // ✅ Validar o refresh token antes de revogar
       const decoded = await this.jwtService.verifyAsync(refreshToken, {
         secret: process.env.JWT_REFRESH_SECRET || 'refresh-secret-key',
       });
+
+      // ✅ Verificar se o token pertence ao usuário
+      if (decoded.sub !== userId) {
+        throw new UnauthorizedException('Token não pertence ao usuário');
+      }
 
       const expiresAt = new Date(decoded.exp * 1000);
 
@@ -139,8 +165,12 @@ export class AuthService {
       );
 
       return { message: 'Logout realizado com sucesso' };
-    } catch {
-      throw new UnauthorizedException('Token inválido');
+    } catch (error) {
+      // ✅ Se for erro de validação, retornar mensagem apropriada
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      throw new UnauthorizedException('Token inválido ou expirado');
     }
   }
 
