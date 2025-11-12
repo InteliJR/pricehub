@@ -1,12 +1,25 @@
-import { PartialType } from '@nestjs/mapped-types';
+import { PartialType, OmitType } from '@nestjs/mapped-types';
 import { CreateFreightDto } from './create-freight.dto';
+import {
+  IsArray,
+  ValidateNested,
+  ArrayMinSize,
+  IsOptional,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { UpdateFreightTaxDto } from './update-freight-tax.dto';
 
 /**
  * DTO para atualização de frete.
- * Todos os campos são opcionais (herda de PartialType).
- * As validações do CreateFreightDto são mantidas para os campos que forem enviados.
- * 
- * NOTA: Este DTO NÃO atualiza impostos (freightTaxes).
- * Para gerenciar impostos, use endpoints específicos ou crie métodos dedicados.
+ * Permite atualizar campos do frete E gerenciar impostos (criar/atualizar).
  */
-export class UpdateFreightDto extends PartialType(CreateFreightDto) {}
+export class UpdateFreightDto extends PartialType(
+  OmitType(CreateFreightDto, ['freightTaxes'] as const),
+) {
+  @IsArray({ message: 'Os impostos devem ser um array' })
+  @ValidateNested({ each: true })
+  @ArrayMinSize(0)
+  @Type(() => UpdateFreightTaxDto)
+  @IsOptional()
+  freightTaxes?: UpdateFreightTaxDto[];
+}
