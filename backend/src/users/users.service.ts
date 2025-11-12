@@ -14,10 +14,11 @@ export class UsersService {
 
   private readonly pepper = process.env.PASSWORD_PEPPER || '';
 
-  // Método auxiliar centralizado para hash de senha
-  private async hashPassword(password: string): Promise<string> {
-    const passwordWithPepper = password + this.pepper;
-    return argon2.hash(passwordWithPepper, {
+  // ============================================
+  // Hash centralizado
+  // ============================================
+  private async hashPassword(password: string) {
+    return argon2.hash(password + this.pepper, {
       type: argon2.argon2id,
       memoryCost: 65536,
       timeCost: 3,
@@ -25,30 +26,32 @@ export class UsersService {
     });
   }
 
-  async create(
-    email: string,
-    name: string,
-    password: string,
-    role: UserRole = UserRole.COMERCIAL,
-    isActive: boolean = false,
-  ) {
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email },
+  // ============================================
+  // POST /users — cria usuário sempre inativo
+  // ============================================
+  async create(data: {
+    email: string;
+    name: string;
+    password: string;
+    role?: UserRole;
+  }) {
+    const exists = await this.prisma.user.findUnique({
+      where: { email: data.email },
     });
 
-    if (existingUser) {
+    if (exists) {
       throw new ConflictException('Email já cadastrado');
     }
 
-    const hashedPassword = await this.hashPassword(password);
+    const hashedPassword = await this.hashPassword(data.password);
 
     const user = await this.prisma.user.create({
       data: {
-        email,
-        name,
+        email: data.email,
+        name: data.name,
         password: hashedPassword,
-        role,
-        isActive,
+        role: data.role ?? UserRole.COMERCIAL,
+        isActive: false,
       },
       select: {
         id: true,
@@ -57,16 +60,72 @@ export class UsersService {
         role: true,
         isActive: true,
         createdAt: true,
+        updatedAt: true,
       },
     });
 
     return user;
   }
 
-  async findByEmail(email: string) {
-    return this.prisma.user.findUnique({
-      where: { email },
+  // ============================================
+  // GET /users — listar
+  // ============================================
+  async findAll() {
+    return this.prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
     });
+  }
+
+  // ============================================
+  // PATCH /users/:id — atualizar role/isActive
+  // ============================================
+  async update(
+    id: string,
+    data: {
+      role?: UserRole;
+      isActive?: boolean;
+    },
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    // validar role se for enviada
+    if (data.role && !(data.role in UserRole)) {
+      throw new BadRequestException('Role inválida');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: {
+        role: data.role,
+        isActive: data.isActive,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return updated;
   }
 
   async findById(id: string) {
@@ -83,140 +142,19 @@ export class UsersService {
       },
     });
 
-    if (!user) {
-      throw new NotFoundException('Usuário não encontrado');
-    }
+    if (!user) throw new NotFoundException('Usuário não encontrado');
 
     return user;
   }
 
-  async findAll() {
-    return this.prisma.user.findMany({
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-      orderBy: { createdAt: 'desc' },
+  async findByEmail(email: string) {
+    return this.prisma.user.findUnique({
+      where: { email },
     });
-  }
-
-  async update(
-    id: string,
-    data: { 
-      name?: string; 
-      role?: UserRole; 
-      isActive?: boolean;
-      password?: string;
-    },
-    requestingUserId?: string,
-  ) {
-    const user = await this.findById(id);
-
-    // Validação: Admin não pode desativar a si mesmo
-    if (requestingUserId === id && data.isActive === false) {
-      throw new BadRequestException('Você não pode desativar sua própria conta');
-    }
-
-    // Validação: Admin não pode mudar a própria role
-    if (requestingUserId === id && data.role && data.role !== user.role) {
-      throw new BadRequestException('Você não pode alterar sua própria role');
-    }
-
-    // Validação: Não pode desativar o último admin ativo
-    if (user.role === UserRole.ADMIN && data.isActive === false) {
-      const activeAdminCount = await this.prisma.user.count({
-        where: {
-          role: UserRole.ADMIN,
-          isActive: true,
-          id: { not: id },
-        },
-      });
-
-      if (activeAdminCount === 0) {
-        throw new BadRequestException(
-          'Não é possível desativar o último administrador ativo do sistema',
-        );
-      }
-    }
-
-    // ✅ CORREÇÃO: usar método centralizado de hash
-     let hashedPassword: string | undefined;
-  if (data.password) {
-    hashedPassword = await this.hashPassword(data.password);
-  }
-
-  return this.prisma.user.update({
-    where: { id },
-    data: {
-      name: data.name,
-      role: data.role,
-      isActive: data.isActive,
-      ...(hashedPassword && { password: hashedPassword }),
-    },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      role: true,
-      isActive: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  });
-  }
-
-  async updateOwnProfile(
-    userId: string,
-    data: {
-      name?: string;
-      password?: string;
-    },
-  ) {
-    await this.findById(userId); // Validar existência
-
-    // ✅ CORREÇÃO: usar método centralizado de hash
-    let hashedPassword: string | undefined;
-    if (data.password) {
-      hashedPassword = await this.hashPassword(data.password);
-    }
-
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        name: data.name,
-        ...(hashedPassword && { password: hashedPassword }),
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-  }
+  }  
 
   async validatePassword(user: any, password: string): Promise<boolean> {
     const passwordWithPepper = password + this.pepper;
     return argon2.verify(user.password, passwordWithPepper);
-  }
-
-  async createFirstAdmin(email: string, password: string, name: string = 'Admin') {
-    const existingAdmin = await this.prisma.user.findFirst({
-      where: { role: UserRole.ADMIN },
-    });
-
-    if (existingAdmin) {
-      throw new ConflictException('Já existe um administrador no sistema');
-    }
-
-    return this.create(email, name, password, UserRole.ADMIN, true);
   }
 }
