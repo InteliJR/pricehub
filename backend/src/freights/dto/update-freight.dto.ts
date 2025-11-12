@@ -13,9 +13,9 @@ import { UpdateFreightTaxDto } from './update-freight-tax.dto';
  * DTO para atualização de frete.
  * Permite atualizar campos do frete E gerenciar impostos (criar/atualizar).
  */
-export class UpdateFreightDto extends PartialType(
+export class UpdateFreightDto extends (PartialType(
   OmitType(CreateFreightDto, ['freightTaxes'] as const),
-) {
+) as any) {
   @IsArray({ message: 'Os impostos devem ser um array' })
   @ValidateNested({ each: true })
   @ArrayMinSize(0)

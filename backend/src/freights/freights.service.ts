@@ -175,6 +175,7 @@ export class FreightsService {
       // Inicia transação para garantir consistência
       const updatedFreight = await this.prisma.$transaction(async (prisma) => {
         // 1. Atualiza os dados do frete (SEM freightTaxes)
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const freight = await prisma.freight.update({
           where: { id },
           data: freightData,

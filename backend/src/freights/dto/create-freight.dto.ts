@@ -21,7 +21,9 @@ import { Type } from 'class-transformer';
 export class CreateFreightTaxDto {
   @IsString()
   @IsNotEmpty({ message: 'O nome do imposto é obrigatório' })
-  @MaxLength(100, { message: 'O nome do imposto deve ter no máximo 100 caracteres' })
+  @MaxLength(100, {
+    message: 'O nome do imposto deve ter no máximo 100 caracteres',
+  })
   name: string; // ICMS, PIS, COFINS, IPI, etc
 
   @IsNumber(
@@ -44,7 +46,9 @@ export class CreateFreightDto {
 
   @IsString()
   @IsOptional()
-  @MaxLength(5000, { message: 'A descrição deve ter no máximo 5000 caracteres' })
+  @MaxLength(5000, {
+    message: 'A descrição deve ter no máximo 5000 caracteres',
+  })
   description?: string;
 
   @IsInt({ message: 'O prazo de pagamento deve ser um número inteiro' })

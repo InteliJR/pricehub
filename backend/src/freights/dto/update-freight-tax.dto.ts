@@ -21,7 +21,9 @@ export class UpdateFreightTaxDto {
 
   @IsString()
   @IsNotEmpty({ message: 'O nome do imposto é obrigatório' })
-  @MaxLength(100, { message: 'O nome do imposto deve ter no máximo 100 caracteres' })
+  @MaxLength(100, {
+    message: 'O nome do imposto deve ter no máximo 100 caracteres',
+  })
   name: string;
 
   @IsNumber(
