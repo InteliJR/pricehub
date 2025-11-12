@@ -4,7 +4,7 @@ import { twMerge } from 'tailwind-merge';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   children: React.ReactNode;
-  variant?: 'primary' | 'secondary' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
   leftIcon?: IconType;
   rightIcon?: IconType;
 }
@@ -22,10 +22,9 @@ export function SecondaryButton({
   
   const variants = {
     primary: 'bg-blue-900 text-white hover:bg-blue-700', 
-    
     secondary: 'bg-white text-blue-900 border border-blue-900 hover:bg-blue-50', 
-    
     ghost: 'bg-transparent text-gray-600 hover:bg-gray-100',
+    danger: 'bg-red-600 text-white hover:bg-red-700',
   };
 
   const combinedClasses = twMerge(

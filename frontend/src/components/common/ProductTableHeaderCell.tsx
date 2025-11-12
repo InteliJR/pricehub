@@ -2,15 +2,15 @@ import React from 'react';
 import { FaSort } from "react-icons/fa";
 import { Text } from '@/components/common/Text';
 
-interface ProductTableHeaderCellProps {
+interface TableHeaderCellProps {
   children: React.ReactNode;
   sortable?: boolean;
 }
 
-export function ProductTableHeaderCell({ 
+export function TableHeaderCell({ 
   children, 
   sortable = false 
-}: ProductTableHeaderCellProps) {
+}: TableHeaderCellProps) {
   
   const content = (
     <span className="flex items-center">

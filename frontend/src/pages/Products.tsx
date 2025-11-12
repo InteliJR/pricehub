@@ -5,6 +5,8 @@ import { PageHeader } from '@/components/features/products/PageHeader';
 import { ActionBar } from '@/components/features/products/ActionBar';
 import { ViewToggle } from '@/components/features/products/ViewToggle';
 import { ProductTable } from '@/components/features/products/ProductTable';
+import { ProductModal } from '@/components/features/products/ProductModal';
+import { ConfirmModal } from '@/components/common/ConfirmModal';
 
 const mockProducts: Product[] = [
   { id: '1', code: '#20462', description: 'Produto X', group: 1, price: 4.95, currency: 'Real', overhead: 4.95 },
@@ -15,24 +17,81 @@ const mockProducts: Product[] = [
 ];
 
 export default function Products() {
-
   const [view, setView] = useState<'table' | 'grid'>('table');
+  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
+  const [selectedProduct, setSelectedProduct] = useState<Product | undefined>(undefined);
 
-  const [products] = useState<Product[]>(mockProducts);
+  const handleOpenCreateModal = () => {
+    setSelectedProduct(undefined);
+    setModalMode('create');
+    setIsModalOpen(true);
+  };
 
-  return (
-    <>
+  const handleOpenEditModal = (product: Product) => {
+    setSelectedProduct(product);
+    setModalMode('edit');
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedProduct(undefined);
+  };
+
+  const handleOpenDeleteModal = (product: Product) => {
+    setSelectedProduct(product);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleCloseDeleteModal = () => {
+    setIsDeleteModalOpen(false);
+    setSelectedProduct(undefined); 
+  };
+
+  const handleConfirmDelete = () => {
+    if (selectedProduct) {
+      setProducts((prevProducts) => 
+        prevProducts.filter((p) => p.id !== selectedProduct.id)
+      );
+    }
+    handleCloseDeleteModal(); 
+  };
+
+return (
+    <> 
       <PageHeader />
-      <ActionBar />
+      <ActionBar onNewProductClick={handleOpenCreateModal} />
       <ViewToggle view={view} onChange={setView} />
-
+      
       {view === 'table' ? (
-        <ProductTable products={products} />
+        <ProductTable 
+          products={products} 
+          onEditProduct={handleOpenEditModal}
+          onDeleteProduct={handleOpenDeleteModal}
+        />
       ) : (
         <div className="bg-white p-6 rounded-lg shadow-sm">
           <p>Visualização em Grid (a ser implementada)</p>
         </div>
       )}
+      
+      <ProductModal 
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        mode={modalMode}
+        product={selectedProduct} 
+      />
+      
+      <ConfirmModal
+        isOpen={isDeleteModalOpen}
+        onClose={handleCloseDeleteModal}
+        onConfirm={handleConfirmDelete}
+        title="Excluir Produto"
+        message="Você tem certeza que deseja excluir esse produto?"
+      />
     </>
   );
 }

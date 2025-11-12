@@ -8,3 +8,13 @@ export interface Product {
   overhead: number;
 }
 
+export interface RawMaterial {
+  id: string;
+  code: string; 
+  name: string;
+  description: string;
+  deadline: string; 
+  price: number;
+  currency: 'Real' | 'Dólar';
+  additionalCosts: number;
+}
