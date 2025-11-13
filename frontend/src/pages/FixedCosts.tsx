@@ -1,17 +1,11 @@
-// src/pages/FixedCosts.tsx
-
-import React, { useState } from 'react';
+import { useState } from 'react';
 import type { FixedCost, OverheadGroup } from '@/types'; 
-
-// Importa os componentes da feature
 import { PageHeader } from '@/components/features/fixedCosts/PageHeader';
 import { FixedCostsSummaryTable } from '@/components/features/fixedCosts/FixedCostsSummaryTable';
 import { OverheadGroupsTable } from '@/components/features/fixedCosts/OverheadGroupsTable';
 
-// Importa o modal que acabamos de criar
 import { FixedCostModal } from '@/components/features/fixedCosts/FixedCostModal'; 
 
-// Mock data baseado na sua imagem
 const mockFixedCosts: FixedCost[] = [
   { id: '1', description: 'DESPESAS COM PESSOAL', code: '', personnel: 53188.59, percentage: 100 },
   { id: '2', description: 'GASTOS GERAIS API', code: '', others: 49913.50, percentage: 100 },

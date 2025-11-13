@@ -43,3 +43,14 @@ export interface AssumptionItem {
   group1: number;
   group2: number;
 }
+
+export type UserStatus = 'Ativo' | 'Inativo';
+export type UserRole = 'Comercial' | 'Logística' | 'Admin'; 
+
+export interface User {
+  id: string;
+  email: string;
+  branch: string; 
+  status: UserStatus;
+  role: UserRole; 
+}
