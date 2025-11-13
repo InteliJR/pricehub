@@ -36,3 +36,10 @@ export interface OverheadGroup {
   salesVolume: number; 
   overheadValue: number; 
 }
+
+export interface AssumptionItem {
+  id: string;
+  item: string;
+  group1: number;
+  group2: number;
+}

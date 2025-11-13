@@ -13,6 +13,7 @@ import FixedCosts from '@/pages/FixedCosts';
 import Users from '@/pages/Users';
 import Profile from '@/pages/Profile';
 import NotFound from '@/pages/NotFound';
+import Assumptions from './pages/Assumptions';
 
 export const router = createBrowserRouter([
   {
@@ -56,7 +57,7 @@ export const router = createBrowserRouter([
             children: [
               {
                 index: true,
-                element: <Taxes />,
+                element: <Assumptions />,
               },
             ],
           },
