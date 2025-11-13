@@ -18,3 +18,21 @@ export interface RawMaterial {
   currency: 'Real' | 'Dólar';
   additionalCosts: number;
 }
+
+export interface FixedCost {
+  id: string;
+  description: string;
+  code?: string;
+  personnel?: number;
+  others?: number;
+  depreciation?: number;
+  percentage: number;
+}
+
+export interface OverheadGroup {
+  id: string;
+  groupName: string; 
+  unit: string; 
+  salesVolume: number; 
+  overheadValue: number; 
+}
