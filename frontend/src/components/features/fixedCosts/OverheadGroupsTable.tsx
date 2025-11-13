@@ -1,6 +1,3 @@
-// src/components/features/fixedCosts/OverheadGroupsTable.tsx
-
-import React from 'react';
 import type { OverheadGroup } from '@/types';
 import { Text } from '@/components/common/Text';
 
@@ -8,7 +5,6 @@ interface OverheadGroupsTableProps {
   groups: OverheadGroup[];
 }
 
-// Helper para formatar moeda
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -18,20 +14,16 @@ const formatCurrency = (value: number) => {
 
 export function OverheadGroupsTable({ groups }: OverheadGroupsTableProps) {
   return (
-    // 1. Trocado 'overflow-x-auto' de volta para 'overflow-hidden'
-    //    para manter as bordas arredondadas.
+
     <div className="shadow-sm rounded-lg overflow-hidden">
       
-      {/* 2. Removida a classe 'min-w-max'. 
-           A classe 'w-full' fará a tabela se ajustar.
-      */}
       <table className="w-full">
         
         {/* Cabeçalho com fundo escuro */}
         <thead className="bg-blue-900">
           <tr>
             {/* Célula do canto (Escura) */}
-            <th className="px-4 py-3 bg-blue-900"></th> 
+            <th className="px-4 py-3 bg-gray-50"></th> 
             
             {/* Cabeçalhos dos Grupos (Escuros) */}
             {groups.map(group => (
