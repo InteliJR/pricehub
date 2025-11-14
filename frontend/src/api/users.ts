@@ -40,6 +40,14 @@ export interface UpdateUserMePayload {
   password?: string;
 }
 
+// POST /users/export
+export async function exportUsers(payload: ExportUsersPayload): Promise<Blob> {
+  const { data } = await apiClient.post('/users/export', payload, {
+    responseType: 'blob', // <-- ESSENCIAL para download de arquivo
+  });
+  return data;
+}
+
 // ========================================
 // Funções de API
 // ========================================
@@ -107,6 +115,13 @@ export function useUpdateUserMutation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [USERS_QUERY_KEY] });
     },
+  });
+}
+
+export function useExportUsersMutation() {
+  return useMutation({
+    mutationFn: exportUsers,
+    // onSuccess não é necessário aqui, tratamos no componente
   });
 }
 

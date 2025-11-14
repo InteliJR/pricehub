@@ -1,25 +1,67 @@
-import React, { useState, useMemo } from 'react';
-import { Users as UsersIcon } from 'lucide-react';
-import type { User, UserRole } from '@/types/user';
-import { Heading } from '@/components/common/Heading';
-import { ConfirmModal } from '@/components/common/ConfirmModal';
-import { UsersActionBar } from '@/components/features/users/UsersActionBar';
-import { UsersTable } from '@/components/features/users/UsersTable';
-import { UserModal } from '@/components/features/users/UserModal';
-import { useUsersQuery, useUpdateUserMutation } from '@/api/users';
-import { LoadingSpinner } from '@/components/common/LoadingSpinner';
-import { EmptyState } from '@/components/common/EmptyState';
-import { Pagination } from '@/components/common/Pagination';
-import toast from 'react-hot-toast';
+import React, { useState, useMemo } from "react";
+import { Users as UsersIcon } from "lucide-react";
+import type { User, UserRole } from "@/types/user";
+import { Heading } from "@/components/common/Heading";
+import { ConfirmModal } from "@/components/common/ConfirmModal";
+import { UsersActionBar } from "@/components/features/users/UsersActionBar";
+import { UsersTable } from "@/components/features/users/UsersTable";
+import { UserModal } from "@/components/features/users/UserModal";
+import {
+  useUsersQuery,
+  useUpdateUserMutation,
+  useExportUsersMutation,
+} from "@/api/users";
+import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import { EmptyState } from "@/components/common/EmptyState";
+import { Pagination } from "@/components/common/Pagination";
+import toast from "react-hot-toast";
+import { triggerCsvDownload } from "@/lib/utils";
+import { ExportModal } from "@/components/common/ExportModal";
 
 export default function Users() {
   // Estado de Paginação e Filtros
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<UserRole | undefined>(undefined);
-  const [isActiveFilter, setIsActiveFilter] = useState<boolean | undefined>(undefined);
+  const [isActiveFilter, setIsActiveFilter] = useState<boolean | undefined>(
+    undefined
+  );
 
+  const exportMutation = useExportUsersMutation();
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+  const handleExportClick = () => {
+    setIsExportModalOpen(true); 
+  };
+
+  const handleConfirmExport = async (options: {
+    limit: number;
+    columns: string[];
+  }) => {
+    setIsExportModalOpen(false); // Fecha o modal
+    toast.loading('Gerando CSV...', { id: 'export-toast' });
+
+    try {
+      // Pega os filtros atuais da página
+      const filters = query; 
+      
+      const payload = {
+        ...filters,
+        ...options,
+      };
+
+      const blob = await exportMutation.mutateAsync(payload);
+
+      // Dispara o download
+      triggerCsvDownload(blob, 'usuarios.csv');
+      toast.success('Download do CSV iniciado.', { id: 'export-toast' });
+
+    } catch (error) {
+      toast.error('Erro ao gerar CSV.', { id: 'export-toast' });
+    }
+  };
+  
   // Query de Usuários
   const query = useMemo(
     () => ({
@@ -28,8 +70,8 @@ export default function Users() {
       search: search || undefined,
       role: roleFilter,
       isActive: isActiveFilter,
-      sortBy: 'createdAt',
-      sortOrder: 'desc' as const,
+      sortBy: "createdAt",
+      sortOrder: "desc" as const,
     }),
     [page, limit, search, roleFilter, isActiveFilter]
   );
@@ -44,17 +86,17 @@ export default function Users() {
   // Estado e handlers do Modal de Edição/Criação
   const [selectedUser, setSelectedUser] = useState<User | undefined>(undefined);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
+  const [modalMode, setModalMode] = useState<"create" | "edit">("create");
 
   const handleOpenCreateModal = () => {
     setSelectedUser(undefined);
-    setModalMode('create');
+    setModalMode("create");
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (user: User) => {
     setSelectedUser(user);
-    setModalMode('edit');
+    setModalMode("edit");
     setIsModalOpen(true);
   };
 
@@ -91,24 +133,11 @@ export default function Users() {
       toast.success(`Usuário ${selectedUser.email} desativado com sucesso.`);
       refetch();
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Erro ao desativar usuário.';
+      const message =
+        error.response?.data?.message || "Erro ao desativar usuário.";
       toast.error(message);
     } finally {
       handleCloseDeleteModal();
-    }
-  };
-
-  // Exportação CSV (simplificado - implementar lógica real depois)
-  const [isExporting, setIsExporting] = useState(false);
-  const handleExport = async () => {
-    setIsExporting(true);
-    try {
-      // TODO: Implementar exportação real via API
-      toast.success('Funcionalidade de exportação em desenvolvimento');
-    } catch (error) {
-      toast.error('Erro ao exportar dados');
-    } finally {
-      setIsExporting(false);
     }
   };
 
@@ -129,7 +158,7 @@ export default function Users() {
           title="Erro ao carregar usuários"
           description="Não foi possível carregar a lista de usuários. Tente novamente."
           action={{
-            label: 'Recarregar',
+            label: "Recarregar",
             onClick: () => refetch(),
           }}
         />
@@ -148,8 +177,8 @@ export default function Users() {
         onSearchChange={setSearch}
         onRoleFilterChange={setRoleFilter}
         onStatusFilterChange={setIsActiveFilter}
-        onExport={handleExport}
-        isExporting={isExporting}
+        onExport={handleExportClick} 
+        isExporting={exportMutation.isPending}
       />
 
       {users.length === 0 ? (
@@ -159,11 +188,11 @@ export default function Users() {
             title="Nenhum usuário encontrado"
             description={
               search || roleFilter || isActiveFilter !== undefined
-                ? 'Ajuste os filtros de busca ou crie um novo usuário.'
-                : 'Comece criando seu primeiro usuário.'
+                ? "Ajuste os filtros de busca ou crie um novo usuário."
+                : "Comece criando seu primeiro usuário."
             }
             action={{
-              label: 'Criar usuário',
+              label: "Criar usuário",
               onClick: handleOpenCreateModal,
             }}
           />
@@ -205,6 +234,20 @@ export default function Users() {
         mode={modalMode}
         user={selectedUser}
         onSuccess={handleModalSuccess}
+      />
+
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        onConfirm={handleConfirmExport}
+        defaultColumns={[
+          { key: 'name', label: 'Nome' },
+          { key: 'email', label: 'Email' },
+          { key: 'role', label: 'Função' },
+          { key: 'isActive', label: 'Status' },
+          // Adicione mais colunas se desejar
+          { key: 'createdAt', label: 'Data de Criação' },
+        ]}
       />
     </>
   );

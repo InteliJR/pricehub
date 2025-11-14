@@ -22,6 +22,17 @@ export interface PaginatedResponse<T> {
   };
 }
 
+export interface ExportUsersPayload {
+  page?: number;
+  limit?: number;
+  search?: string;
+  role?: UserRole;
+  isActive?: boolean;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  columns?: string[];
+}
+
 // Helpers para conversão de status
 export function getUserStatusText(isActive: boolean): string {
   return isActive ? 'Ativo' : 'Inativo';

@@ -14,6 +14,7 @@ import {
   UpdateUserByAdminDto,
   UpdateUserMeDto,
 } from './users.controller';
+import { ExportUsersDto } from './users.controller';
 
 @Injectable()
 export class UsersService {
@@ -67,6 +68,76 @@ export class UsersService {
     });
 
     return user;
+  }
+
+  // ============================================
+  // POST /users/export — exportar usuários
+  // ============================================
+  async exportUsers(options: ExportUsersDto): Promise<string> {
+    const { columns = ['id', 'name', 'email', 'role', 'isActive'], ...query } =
+      options;
+
+    // 1. Busca os dados (sem paginação, mas com filtros)
+    const users = await this.prisma.user.findMany({
+      where: this.buildWhereClause(query),
+      orderBy: {
+        [query.sortBy || 'createdAt']: query.sortOrder || 'desc',
+      },
+      // Aplica o limite de linhas do modal
+      take: options.limit ? +options.limit : 1000,
+    });
+
+    // 2. Constrói o CSV
+    if (!users.length) {
+      return 'Nenhum usuário encontrado com os filtros aplicados.';
+    }
+
+    // Pega as colunas do primeiro usuário para garantir a ordem (ou usa o DTO)
+    const headers = columns.join(',');
+
+    const rows = users.map((user) => {
+      return columns
+        .map((col) => {
+          let value = (user as any)[col];
+
+          // Trata valores booleanos
+          if (typeof value === 'boolean') {
+            value = value ? 'Ativo' : 'Inativo';
+          }
+
+          // Escapa vírgulas e aspas
+          if (
+            typeof value === 'string' &&
+            (value.includes(',') || value.includes('"'))
+          ) {
+            return `"${value.replace(/"/g, '""')}"`;
+          }
+          return value;
+        })
+        .join(',');
+    });
+
+    return [headers, ...rows].join('\n');
+  }
+
+  // Helper para reutilizar a lógica de filtro
+  private buildWhereClause(query: FindAllUsersQueryDto) {
+    const { search, role, isActive } = query;
+    const where: any = {};
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    if (role) {
+      where.role = role;
+    }
+    if (isActive !== undefined) {
+      where.isActive = isActive;
+    }
+    return where;
   }
 
   // ============================================
@@ -176,12 +247,16 @@ export class UsersService {
 
     // 1. Regra de Negócio: ADMIN não pode desativar a si mesmo (Teste 7)
     if (id === adminId && data.isActive === false) {
-      throw new BadRequestException('Um administrador não pode desativar a si mesmo.');
+      throw new BadRequestException(
+        'Um administrador não pode desativar a si mesmo.',
+      );
     }
 
     // 2. Regra de Negócio: ADMIN não pode mudar a própria role (Teste 8)
     if (id === adminId && data.role && data.role !== user.role) {
-      throw new BadRequestException('Um administrador não pode alterar a própria função (role).');
+      throw new BadRequestException(
+        'Um administrador não pode alterar a própria função (role).',
+      );
     }
 
     const updateData: any = {
@@ -221,7 +296,9 @@ export class UsersService {
 
     if (!user) {
       // Isso não deve acontecer se o JwtAuthGuard estiver funcionando corretamente
-      throw new InternalServerErrorException('Usuário autenticado não encontrado no banco de dados.');
+      throw new InternalServerErrorException(
+        'Usuário autenticado não encontrado no banco de dados.',
+      );
     }
 
     // Validação: Usuário não pode alterar role ou isActive via /me

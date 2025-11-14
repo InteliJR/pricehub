@@ -1,9 +1,9 @@
-import type { User } from '@/types/user';
-import { getUserStatusText, getUserStatusVariant } from '@/types/user';
-import { Text } from '@/components/common/Text';
-import { StatusBadge } from '@/components/common/StatusBadge';
-import { IconButton } from '@/components/common/IconButton';
-import { FiEdit, FiTrash2 } from 'react-icons/fi';
+import type { User } from "@/types/user";
+import { getUserStatusText, getUserStatusVariant } from "@/types/user";
+import { Text } from "@/components/common/Text";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import { IconButton } from "@/components/common/IconButton";
+import { FiEdit, FiUserX } from "react-icons/fi";
 
 interface UserTableRowProps {
   user: User;
@@ -45,14 +45,16 @@ export function UserTableRow({ user, onEdit, onDelete }: UserTableRowProps) {
           <IconButton
             icon={FiEdit}
             aria-label="Editar usuário"
+            title="Editar usuário"
             onClick={onEdit}
-            className="hover:bg-blue-100 hover:text-blue-600"
+            className="hover:bg-blue-100 hover:text-blue-600 cursor-pointer"
           />
           <IconButton
-            icon={FiTrash2}
+            title="Desativar usuário"
+            icon={FiUserX}
             aria-label="Desativar usuário"
             onClick={onDelete}
-            className="hover:bg-red-100 hover:text-red-600"
+            className="hover:bg-red-100 hover:text-red-600 cursor-pointer"
           />
         </div>
       </td>

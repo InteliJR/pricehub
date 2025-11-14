@@ -9,6 +9,7 @@ import {
   UseGuards,
   Query,
   Req,
+  Res
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UserRole } from '@prisma/client';
@@ -20,12 +21,12 @@ import {
   IsEnum,
   IsOptional,
   IsBoolean,
-  IsUUID,
+  IsArray,
 } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 
 // ========================================
 // DTOs
@@ -89,11 +90,12 @@ export class FindAllUsersQueryDto {
 
   @IsOptional()
   @IsEnum(UserRole)
-  @Type(() => Boolean)
+  // @Type(() => Boolean) // <--- REMOVA ESTA LINHA (ERRADA)
   role?: UserRole;
 
   @IsOptional()
   @IsBoolean()
+  @Type(() => Boolean) // <--- ADICIONE ESTA LINHA (CORREÇÃO)
   isActive?: boolean;
 
   @IsOptional()
@@ -107,10 +109,17 @@ export class FindAllUsersQueryDto {
   @IsOptional()
   @Type(() => Number)
   page?: number;
-  
+
   @IsOptional()
   @Type(() => Number)
   limit?: number;
+}
+
+export class ExportUsersDto extends FindAllUsersQueryDto {
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  columns?: string[]; // Ex: ['name', 'email', 'role']
 }
 
 // ========================================
@@ -139,6 +148,29 @@ export class UsersController {
   @Get(':id')
   findOne(@Param('id', new ValidationPipe({ transform: true })) id: string) {
     return this.usersService.findById(id);
+  }
+
+  // ----------------------------------------
+  // POST /users/export - Exportar Usuários (ADMIN)
+  // ----------------------------------------
+  @Roles(UserRole.ADMIN)
+  @UseGuards(RolesGuard)
+  @Post('export')
+  async export(
+    @Body(ValidationPipe) options: ExportUsersDto,
+    @Res() res: Response,
+  ) {
+    const csvData = await this.usersService.exportUsers(options);
+    
+    // Define os headers para forçar o download no navegador
+    res.header('Content-Type', 'text/csv');
+    res.header(
+      'Content-Disposition',
+      `attachment; filename="usuarios_${new Date().toISOString()}.csv"`,
+    );
+    
+    // Envia o CSV
+    return res.send(csvData);
   }
 
   // ----------------------------------------
