@@ -1,4 +1,3 @@
-// src/components/layout/Sidebar.tsx
 import { NavLink } from 'react-router-dom';
 import {
   Boxes,
