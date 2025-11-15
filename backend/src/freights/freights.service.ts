@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateFreightDto } from './dto/create-freight.dto';
 import { UpdateFreightDto } from './dto/update-freight.dto';
 import { QueryFreightDto } from './dto/query-freight.dto';
+import { ExportFreightDto } from './dto/export-freight.dto';
 import { Currency } from '@prisma/client';
 
 @Injectable()
@@ -374,5 +375,96 @@ export class FreightsService {
         additionalCosts: avgPrice._avg.additionalCosts,
       },
     };
+  }
+
+  /**
+   * Exporta fretes em formato CSV
+   */
+  async exportToCSV(exportDto: ExportFreightDto): Promise<string> {
+    try {
+      const { limit, sortBy, sortOrder, filters } = exportDto;
+
+      // Configurar filtros
+      const where: any = {};
+
+      if (filters?.search) {
+        where.OR = [
+          { name: { contains: filters.search, mode: 'insensitive' } },
+          { description: { contains: filters.search, mode: 'insensitive' } },
+        ];
+      }
+
+      if (filters?.currency) {
+        where.currency = filters.currency;
+      }
+
+      // Buscar dados com limite
+      const freights = await this.prisma.freight.findMany({
+        where,
+        include: {
+          freightTaxes: {
+            select: {
+              name: true,
+              rate: true,
+            },
+          },
+        },
+        orderBy: {
+          [sortBy || 'name']: sortOrder || 'asc',
+        },
+        take: limit || 1000,
+      });
+
+      // Montar o CSV
+      const headers = [
+        'ID',
+        'Nome',
+        'Descrição',
+        'Prazo (dias)',
+        'Preço Unitário',
+        'Moeda',
+        'Custos Adicionais',
+        'Impostos',
+      ];
+
+      // Linha de cabeçalho
+      const csvLines = [headers.join(',')];
+
+      // Linhas de dados
+      for (const freight of freights) {
+        // Formatar impostos como string: "ICMS (12%), PIS (1.65%)"
+        const taxesStr = freight.freightTaxes
+          .map((tax) => `${tax.name} (${tax.rate}%)`)
+          .join(', ');
+
+        // Escapar campos que possam conter vírgulas ou aspas
+        const escapeCsvField = (field: any): string => {
+          if (field === null || field === undefined) return '';
+          const str = String(field);
+          if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+            return `"${str.replace(/"/g, '""')}"`;
+          }
+          return str;
+        };
+
+        const row = [
+          escapeCsvField(freight.id),
+          escapeCsvField(freight.name),
+          escapeCsvField(freight.description || ''),
+          escapeCsvField(freight.paymentTerm),
+          escapeCsvField(freight.unitPrice.toFixed(2)),
+          escapeCsvField(freight.currency),
+          escapeCsvField(freight.additionalCosts.toFixed(2)),
+          escapeCsvField(taxesStr),
+        ];
+
+        csvLines.push(row.join(','));
+      }
+
+      return csvLines.join('\n');
+    } catch (error: any) {
+      const message = error?.message || 'Erro desconhecido';
+      throw new BadRequestException(`Erro ao exportar fretes: ${message}`);
+    }
   }
 }

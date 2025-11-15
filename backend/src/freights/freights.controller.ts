@@ -8,11 +8,15 @@ import {
   Delete,
   UseGuards,
   Query,
+  Res, // <-- Importado para manipulação da resposta nativa
+  HttpStatus, // <-- Importado para retornar o status 200 OK
 } from '@nestjs/common';
+import type { Response } from 'express'; // <-- Usar 'import type' para evitar o erro TS1272
 import { FreightsService } from './freights.service';
 import { CreateFreightDto } from './dto/create-freight.dto';
 import { UpdateFreightDto } from './dto/update-freight.dto';
 import { QueryFreightDto } from './dto/query-freight.dto';
+import { ExportFreightDto } from './dto/export-freight.dto'; // <-- Importação do DTO de exportação
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -33,6 +37,31 @@ export class FreightsController {
   create(@Body() createFreightDto: CreateFreightDto) {
     return this.freightsService.create(createFreightDto);
   }
+
+  // --- ROTA ADICIONADA: POST /freights/export (para download de CSV) ---
+  /**
+   * Exporta fretes em formato CSV com filtros e ordenação
+   * Apenas ADMIN e LOGISTICA podem exportar
+   */
+  @Post('export') // Define o endpoint POST para /freights/export
+  @Roles(UserRole.ADMIN, UserRole.LOGISTICA)
+  async export(
+    @Body() exportDto: ExportFreightDto, // Parâmetros de filtro e exportação
+    @Res() res: Response, // Usa a resposta nativa do Express para forçar o download
+  ) {
+    const csvData = await this.freightsService.exportToCSV(exportDto);
+
+    // Configura os cabeçalhos para o download do arquivo CSV
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="fretes_export_${Date.now()}.csv"`,
+    );
+
+    // Envia os dados CSV
+    res.status(HttpStatus.OK).send(csvData);
+  }
+  // -----------------------------------------------------------------------
 
   /**
    * Lista todos os fretes com paginação e filtros
