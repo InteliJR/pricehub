@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { TaxesService } from './taxes.service';
 import { CreateTaxDto } from './dto/create-tax.dto';
@@ -18,7 +19,6 @@ import { UserRole } from '@prisma/client';
 
 @Controller('taxes')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.ADMIN, UserRole.IMPOSTO) // Apenas ADMIN e IMPOSTO mexem nas premissas
 export class TaxesController {
   constructor(private readonly taxesService: TaxesService) {}
 
@@ -29,11 +29,25 @@ export class TaxesController {
   }
 
   @Get()
-  findAll() {
-    return this.taxesService.findAll();
+  @Roles(UserRole.ADMIN, UserRole.IMPOSTO, UserRole.COMERCIAL)
+  findAll(
+    @Query('page') page = '1',
+    @Query('limit') limit = '10',
+    @Query('search') search?: string,
+    @Query('sortBy') sortBy = 'name',
+    @Query('sortOrder') sortOrder = 'asc',
+  ) {
+    return this.taxesService.findAll({
+      page: Number(page),
+      limit: Number(limit),
+      search,
+      sortBy,
+      sortOrder,
+    });
   }
 
   @Get(':id')
+  @Roles(UserRole.ADMIN, UserRole.IMPOSTO, UserRole.COMERCIAL)
   findOne(@Param('id') id: string) {
     return this.taxesService.findOne(id);
   }
@@ -45,8 +59,14 @@ export class TaxesController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.IMPOSTO)
   remove(@Param('id') id: string) {
     return this.taxesService.remove(id);
+  }
+
+  @Post('export')
+  @Roles(UserRole.ADMIN, UserRole.IMPOSTO)
+  export(@Body() payload: any) {
+    return this.taxesService.export(payload);
   }
 }
