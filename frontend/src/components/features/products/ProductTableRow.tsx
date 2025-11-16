@@ -18,9 +18,10 @@ const formatCurrency = (value: number, currency: string) => {
 
 export function ProductTableRow({ product, onEdit, onDelete }: ProductTableRowProps) {
     return (
-        <tr className="border-b border-gray-200 odd:bg-white even:bg-gray-50 hover:bg-blue-50">      <td className="px-4 py-3 whitespace-nowrap">
-            <Text variant="caption" className="text-gray-700">{product.code}</Text>
-        </td>
+        <tr className="border-b border-gray-200 odd:bg-white even:bg-gray-50 hover:bg-blue-50">
+            <td className="px-4 py-3 whitespace-nowrap">
+                <Text variant="caption" className="text-gray-700">{product.code}</Text>
+            </td>
 
             <td className="px-4 py-3 whitespace-nowrap">
                 <Text variant="caption" className="font-medium text-gray-900">
