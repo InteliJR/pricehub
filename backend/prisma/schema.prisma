@@ -204,30 +204,44 @@ model RawMaterialChangeLog {
 
 model Product {
   id          String   @id @default(uuid())
-  code        String   @unique // Numérico apenas
+  code        String   @unique
   name        String
   description String?  @db.Text
   creatorId   String
   
-  // Preço automático (calculado, mas pode ser armazenado para cache)
   priceWithoutTaxesAndFreight Decimal? @db.Decimal(12, 2)
   priceWithTaxesAndFreight    Decimal? @db.Decimal(12, 2)
   
-  // Relação opcional com custo fixo (0 ou 1)
   fixedCostId String?
+  productGroupId String?  // <- NOVO CAMPO
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // Relações
   creator             User              @relation(fields: [creatorId], references: [id])
   fixedCost           FixedCost?        @relation(fields: [fixedCostId], references: [id], onDelete: SetNull)
+  productGroup        ProductGroup?     @relation(fields: [productGroupId], references: [id], onDelete: SetNull) // <- NOVA RELAÇÃO
   productRawMaterials ProductRawMaterial[]
 
   @@index([code])
   @@index([name])
   @@index([fixedCostId])
+  @@index([productGroupId])  // <- NOVO ÍNDICE
   @@map("products")
+}
+
+model ProductGroup {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relações
+  products Product[]
+
+  @@index([name])
+  @@map("product_groups")
 }
 
 // ============================================

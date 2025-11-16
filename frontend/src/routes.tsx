@@ -7,13 +7,13 @@ import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import Login from '@/pages/Login';
 import Products from '@/pages/Products';
 import RawMaterials from '@/pages/RawMaterials';
-import Taxes from '@/pages/Taxes';
 import Freights from '@/pages/Freights';
 import FixedCosts from '@/pages/FixedCosts';
 import Users from '@/pages/Users';
 import Profile from '@/pages/Profile';
 import NotFound from '@/pages/NotFound';
 import Assumptions from './pages/Assumptions';
+import ProductGroups from './pages/ProductGroups';
 
 export const router = createBrowserRouter([
   {
@@ -38,6 +38,16 @@ export const router = createBrowserRouter([
               {
                 index: true,
                 element: <Products />,
+              },
+            ],
+          },
+          {
+            path: 'grupos',
+            element: <ProtectedRoute allowedRoles={['ADMIN', 'COMERCIAL']} />,
+            children: [
+              {
+                index: true,
+                element: <ProductGroups />,
               },
             ],
           },

@@ -43,6 +43,10 @@ export class CreateProductDto {
   @IsOptional()
   fixedCostId?: string;
 
+  @IsUUID()
+  @IsOptional()
+  productGroupId?: string;
+
   @IsArray({ message: 'rawMaterials deve ser um array' })
   @ValidateNested({ each: true })
   @ArrayMinSize(1, {
