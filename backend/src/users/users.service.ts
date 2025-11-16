@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   InternalServerErrorException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserRole } from '@prisma/client';
@@ -13,8 +14,8 @@ import {
   FindAllUsersQueryDto,
   UpdateUserByAdminDto,
   UpdateUserMeDto,
+  ExportUsersDto,
 } from './users.controller';
-import { ExportUsersDto } from './users.controller';
 
 @Injectable()
 export class UsersService {
@@ -32,6 +33,14 @@ export class UsersService {
       timeCost: 3,
       parallelism: 4,
     });
+  }
+
+  // ============================================
+  // Validação de senha
+  // ============================================
+  async validatePassword(user: any, password: string): Promise<boolean> {
+    const passwordWithPepper = password + this.pepper;
+    return argon2.verify(user.password, passwordWithPepper);
   }
 
   // ============================================
@@ -54,7 +63,7 @@ export class UsersService {
         name: data.name,
         password: hashedPassword,
         role: data.role ?? UserRole.COMERCIAL,
-        isActive: false, // Usuário criado inativo por padrão
+        isActive: false,
       },
       select: {
         id: true,
@@ -77,22 +86,18 @@ export class UsersService {
     const { columns = ['id', 'name', 'email', 'role', 'isActive'], ...query } =
       options;
 
-    // 1. Busca os dados (sem paginação, mas com filtros)
     const users = await this.prisma.user.findMany({
       where: this.buildWhereClause(query),
       orderBy: {
         [query.sortBy || 'createdAt']: query.sortOrder || 'desc',
       },
-      // Aplica o limite de linhas do modal
       take: options.limit ? +options.limit : 1000,
     });
 
-    // 2. Constrói o CSV
     if (!users.length) {
       return 'Nenhum usuário encontrado com os filtros aplicados.';
     }
 
-    // Pega as colunas do primeiro usuário para garantir a ordem (ou usa o DTO)
     const headers = columns.join(',');
 
     const rows = users.map((user) => {
@@ -100,12 +105,10 @@ export class UsersService {
         .map((col) => {
           let value = (user as any)[col];
 
-          // Trata valores booleanos
           if (typeof value === 'boolean') {
             value = value ? 'Ativo' : 'Inativo';
           }
 
-          // Escapa vírgulas e aspas
           if (
             typeof value === 'string' &&
             (value.includes(',') || value.includes('"'))
@@ -120,7 +123,9 @@ export class UsersService {
     return [headers, ...rows].join('\n');
   }
 
+  // ============================================
   // Helper para reutilizar a lógica de filtro
+  // ============================================
   private buildWhereClause(query: FindAllUsersQueryDto) {
     const { search, role, isActive } = query;
     const where: any = {};
@@ -235,7 +240,7 @@ export class UsersService {
   async updateByAdmin(
     id: string,
     data: UpdateUserByAdminDto,
-    adminId: string, // ID do ADMIN logado
+    adminId: string,
   ) {
     const user = await this.prisma.user.findUnique({
       where: { id },
@@ -245,14 +250,14 @@ export class UsersService {
       throw new NotFoundException('Usuário não encontrado');
     }
 
-    // 1. Regra de Negócio: ADMIN não pode desativar a si mesmo (Teste 7)
+    // Regra: ADMIN não pode desativar a si mesmo
     if (id === adminId && data.isActive === false) {
       throw new BadRequestException(
         'Um administrador não pode desativar a si mesmo.',
       );
     }
 
-    // 2. Regra de Negócio: ADMIN não pode mudar a própria role (Teste 8)
+    // Regra: ADMIN não pode mudar a própria role
     if (id === adminId && data.role && data.role !== user.role) {
       throw new BadRequestException(
         'Um administrador não pode alterar a própria função (role).',
@@ -295,25 +300,57 @@ export class UsersService {
     });
 
     if (!user) {
-      // Isso não deve acontecer se o JwtAuthGuard estiver funcionando corretamente
       throw new InternalServerErrorException(
         'Usuário autenticado não encontrado no banco de dados.',
       );
     }
 
-    // Validação: Usuário não pode alterar role ou isActive via /me
-    // Essa validação é garantida pelo DTO `UpdateUserMeDto` que só tem `name` e `password`.
-    // Se o DTO for alterado para incluir role/isActive, essa validação será necessária.
-    // Por enquanto, o DTO já restringe os campos.
-
-    const updateData: any = {
-      name: data.name,
-    };
-
-    if (data.password) {
-      updateData.password = await this.hashPassword(data.password);
+    // 1. Validação: Se está alterando email ou senha, exige senha atual
+    if ((data.email || data.newPassword) && !data.currentPassword) {
+      throw new BadRequestException(
+        'Senha atual é obrigatória para alterações de email ou senha.',
+      );
     }
 
+    // 2. Validação: Se forneceu senha atual, ela deve estar correta
+    if (data.currentPassword) {
+      const isPasswordValid = await this.validatePassword(
+        user,
+        data.currentPassword,
+      );
+
+      if (!isPasswordValid) {
+        throw new UnauthorizedException('Senha atual incorreta.');
+      }
+    }
+
+    // 3. Validação: Se está alterando email, verificar se já existe
+    if (data.email && data.email !== user.email) {
+      const emailExists = await this.prisma.user.findUnique({
+        where: { email: data.email },
+      });
+
+      if (emailExists) {
+        throw new ConflictException('Este email já está em uso.');
+      }
+    }
+
+    // 4. Preparar dados para atualização
+    const updateData: any = {};
+
+    if (data.name) {
+      updateData.name = data.name;
+    }
+
+    if (data.email) {
+      updateData.email = data.email;
+    }
+
+    if (data.newPassword) {
+      updateData.password = await this.hashPassword(data.newPassword);
+    }
+
+    // 5. Atualizar no banco
     const updated = await this.prisma.user.update({
       where: { id },
       data: updateData,
@@ -338,10 +375,5 @@ export class UsersService {
     return this.prisma.user.findUnique({
       where: { email },
     });
-  }
-
-  async validatePassword(user: any, password: string): Promise<boolean> {
-    const passwordWithPepper = password + this.pepper;
-    return argon2.verify(user.password, passwordWithPepper);
   }
 }
