@@ -19,6 +19,18 @@ export interface RawMaterial {
   additionalCosts: number;
 }
 
+export interface Freight {
+id: string;
+originUf: string; 
+originCity: string;
+destinyCity: string;
+destinyUf: string;
+distance: number; 
+vehicle: string;
+charge: number;
+thirdParties: string;
+}
+
 export interface FixedCost {
   id: string;
   description: string;
