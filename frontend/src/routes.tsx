@@ -6,6 +6,7 @@ import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 // Pages
 import Login from '@/pages/Login';
 import Products from '@/pages/Products';
+import ProductsGroup from '@/pages/ProductsGroup';
 import RawMaterials from '@/pages/RawMaterials';
 import Taxes from '@/pages/Taxes';
 import Freights from '@/pages/Freights';
@@ -38,6 +39,16 @@ export const router = createBrowserRouter([
               {
                 index: true,
                 element: <Products />,
+              },
+            ],
+          },
+          {
+            path: 'grupo-de-produtos',
+            element: <ProtectedRoute allowedRoles={['ADMIN', 'COMERCIAL']} />,
+            children: [
+              {
+                index: true,
+                element: <ProductsGroup />,
               },
             ],
           },

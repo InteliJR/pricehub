@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
+  Box,
   Boxes,
   Component,
   Landmark,
@@ -16,6 +17,12 @@ const navItems = [
   {
     label: 'Produtos',
     path: '/produtos',
+    icon: Box,
+    allowedRoles: ['ADMIN', 'COMERCIAL'],
+  },
+  {
+    label: 'Grupo de Produtos',
+    path: '/grupo-de-produtos',
     icon: Boxes,
     allowedRoles: ['ADMIN', 'COMERCIAL'],
   },

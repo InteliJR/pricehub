@@ -8,6 +8,12 @@ export interface Product {
   overhead: number;
 }
 
+export interface ProductsGroup {
+  id: string;
+  product: string;
+  volume: number;
+}
+
 export interface RawMaterial {
   id: string;
   code: string; 
