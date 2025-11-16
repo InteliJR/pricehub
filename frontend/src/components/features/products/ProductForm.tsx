@@ -6,12 +6,15 @@ import { Input } from '@/components/common/Input';
 import { Label } from '@/components/common/Label';
 import { Textarea } from '@/components/common/Textarea';
 import { Select } from '@/components/common/Select'; // 1. Importar o Select
+import { useFixedCostsQuery } from '@/api/fixedCosts';
 
 interface ProductFormProps {
   product?: Product;
 }
 
 export function ProductForm({ product }: ProductFormProps) {
+  const { data: fixedCostsData } = useFixedCostsQuery({ page: 1, limit: 100 });
+  const fixedCosts = fixedCostsData?.data ?? [];
   return (
     // 2. Adicionado um grid para melhor layout dos campos
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -20,7 +23,8 @@ export function ProductForm({ product }: ProductFormProps) {
       <div className="sm:col-span-1">
         <Label htmlFor="code">Código</Label>
         <Input 
-          id="code" 
+          id="code"
+          name="code"
           placeholder="Insira o código" 
           defaultValue={product?.code}
         />
@@ -31,6 +35,7 @@ export function ProductForm({ product }: ProductFormProps) {
         <Label htmlFor="group">Grupo</Label>
         <Input 
           id="group" 
+          name="group"
           type="number"
           placeholder="Insira o grupo" 
           defaultValue={product?.group}
@@ -42,43 +47,22 @@ export function ProductForm({ product }: ProductFormProps) {
         <Label htmlFor="description">Descrição</Label>
         <Textarea 
           id="description" 
+          name="description"
           placeholder="Insira a descrição" 
           rows={3} 
           defaultValue={product?.description}
         />
       </div>
-      
-      {/* Campo Preço */}
-      <div className="sm:col-span-1">
-        <Label htmlFor="price">Preço</Label>
-        <Input 
-          id="price" 
-          type="number"
-          step="0.01"
-          placeholder="0.00" 
-          defaultValue={product?.price}
-        />
-      </div>
-      
-      {/* Campo Moeda */}
-      <div className="sm:col-span-1">
-        <Label htmlFor="currency">Moeda</Label>
-        <Select id="currency" defaultValue={product?.currency}>
-          <option value="Real">Real</option>
-          <option value="Dólar">Dólar</option>
-        </Select>
-      </div>
 
-      {/* Campo Overhead */}
+      {/* Seleção de Custo Fixo (Overhead) */}
       <div className="sm:col-span-2">
-        <Label htmlFor="overhead">Overhead a considerar</Label>
-        <Input 
-          id="overhead" 
-          type="number"
-          step="0.01"
-          placeholder="0.00" 
-          defaultValue={product?.overhead}
-        />
+        <Label htmlFor="fixedCostId">Custo Fixo (Overhead)</Label>
+        <Select id="fixedCostId" name="fixedCostId" defaultValue="">
+          <option value="">Nenhum</option>
+          {fixedCosts.map(fc => (
+            <option key={fc.id} value={fc.id}>{fc.code ? `${fc.code} - ${fc.description}` : fc.description}</option>
+          ))}
+        </Select>
       </div>
     </div>
   );
