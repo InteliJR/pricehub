@@ -22,6 +22,7 @@ import {
   IsOptional,
   IsBoolean,
   IsArray,
+  ValidateIf,
 } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -42,7 +43,7 @@ export class CreateUserDto {
   name: string;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(6)
   password: string;
 
   @IsEnum(UserRole)
@@ -65,7 +66,7 @@ export class UpdateUserByAdminDto {
   isActive?: boolean;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(6)
   @IsOptional()
   password?: string;
 }
@@ -73,13 +74,24 @@ export class UpdateUserByAdminDto {
 // DTO para atualização de dados próprios (qualquer usuário)
 export class UpdateUserMeDto {
   @IsString()
+  @MinLength(3)
   @IsOptional()
   name?: string;
 
-  @IsString()
-  @MinLength(8)
+  @IsEmail()
   @IsOptional()
-  password?: string;
+  email?: string;
+
+  // Senha atual é OBRIGATÓRIA se estiver alterando email ou senha
+  @ValidateIf((o) => o.email || o.newPassword)
+  @IsString()
+  @MinLength(6, { message: 'Senha atual é obrigatória para alterações de segurança' })
+  currentPassword?: string;
+
+  @IsString()
+  @MinLength(6, { message: 'Nova senha deve ter no mínimo 6 caracteres' })
+  @IsOptional()
+  newPassword?: string;
 }
 
 // DTO para query parameters de listagem
@@ -90,12 +102,11 @@ export class FindAllUsersQueryDto {
 
   @IsOptional()
   @IsEnum(UserRole)
-  // @Type(() => Boolean) // <--- REMOVA ESTA LINHA (ERRADA)
   role?: UserRole;
 
   @IsOptional()
   @IsBoolean()
-  @Type(() => Boolean) // <--- ADICIONE ESTA LINHA (CORREÇÃO)
+  @Type(() => Boolean)
   isActive?: boolean;
 
   @IsOptional()
@@ -119,16 +130,38 @@ export class ExportUsersDto extends FindAllUsersQueryDto {
   @IsArray()
   @IsString({ each: true })
   @IsOptional()
-  columns?: string[]; // Ex: ['name', 'email', 'role']
+  columns?: string[];
 }
 
 // ========================================
 // CONTROLLER
 // ========================================
-@UseGuards(JwtAuthGuard) // Aplica autenticação em todas as rotas do controller
+@UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
+
+  // ----------------------------------------
+  // ⚠️ IMPORTANTE: Rotas específicas ANTES das rotas com parâmetros
+  // ----------------------------------------
+
+  // ----------------------------------------
+  // GET /users/me - Obter Dados Próprios (Qualquer Autenticado)
+  // ----------------------------------------
+  @Get('me')
+  getMe(@Req() req: Request) {
+    const userId = (req.user as any).id;
+    return this.usersService.findById(userId);
+  }
+
+  // ----------------------------------------
+  // PATCH /users/me - Atualizar Dados Próprios (Qualquer Autenticado)
+  // ----------------------------------------
+  @Patch('me')
+  updateMe(@Req() req: Request, @Body(ValidationPipe) data: UpdateUserMeDto) {
+    const userId = (req.user as any).id;
+    return this.usersService.updateMe(userId, data);
+  }
 
   // ----------------------------------------
   // GET /users - Listar Usuários (ADMIN)
@@ -138,16 +171,6 @@ export class UsersController {
   @Get()
   findAll(@Query(ValidationPipe) query: FindAllUsersQueryDto) {
     return this.usersService.findAll(query);
-  }
-
-  // ----------------------------------------
-  // GET /users/:id - Obter Usuário por ID (ADMIN)
-  // ----------------------------------------
-  @Roles(UserRole.ADMIN)
-  @UseGuards(RolesGuard)
-  @Get(':id')
-  findOne(@Param('id', new ValidationPipe({ transform: true })) id: string) {
-    return this.usersService.findById(id);
   }
 
   // ----------------------------------------
@@ -162,14 +185,12 @@ export class UsersController {
   ) {
     const csvData = await this.usersService.exportUsers(options);
     
-    // Define os headers para forçar o download no navegador
     res.header('Content-Type', 'text/csv');
     res.header(
       'Content-Disposition',
       `attachment; filename="usuarios_${new Date().toISOString()}.csv"`,
     );
     
-    // Envia o CSV
     return res.send(csvData);
   }
 
@@ -181,6 +202,16 @@ export class UsersController {
   @Post()
   create(@Body(ValidationPipe) data: CreateUserDto) {
     return this.usersService.create(data);
+  }
+
+  // ----------------------------------------
+  // GET /users/:id - Obter Usuário por ID (ADMIN)
+  // ----------------------------------------
+  @Roles(UserRole.ADMIN)
+  @UseGuards(RolesGuard)
+  @Get(':id')
+  findOne(@Param('id', new ValidationPipe({ transform: true })) id: string) {
+    return this.usersService.findById(id);
   }
 
   // ----------------------------------------
@@ -196,25 +227,5 @@ export class UsersController {
   ) {
     const adminId = (req.user as any).id;
     return this.usersService.updateByAdmin(id, data, adminId);
-  }
-
-  // ----------------------------------------
-  // GET /users/me - Obter Dados Próprios (Qualquer Autenticado)
-  // ----------------------------------------
-  @Get('me')
-  getMe(@Req() req: Request) {
-    // O token JWT decodificado é injetado no objeto Request pelo JwtAuthGuard
-    // Assumindo que o payload do JWT contém o ID do usuário
-    const userId = (req.user as any).id;
-    return this.usersService.findById(userId);
-  }
-
-  // ----------------------------------------
-  // PATCH /users/me - Atualizar Dados Próprios (Qualquer Autenticado)
-  // ----------------------------------------
-  @Patch('me')
-  updateMe(@Req() req: Request, @Body(ValidationPipe) data: UpdateUserMeDto) {
-    const userId = (req.user as any).id;
-    return this.usersService.updateMe(userId, data);
   }
 }
