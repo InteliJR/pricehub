@@ -3,6 +3,7 @@ import {
   UserRole,
   Currency,
   MeasurementUnit,
+  FreightOperationType,
 } from '@prisma/client';
 import * as argon2 from 'argon2';
 
@@ -132,7 +133,7 @@ async function main() {
   console.log('✅ Impostos criados com sucesso');
 
   // ============================================
-  // 3. FRETES (Freights e FreightTaxes)
+  // 3. FRETES (Freights e FreightTaxes) - CORRIGIDO
   // ============================================
   console.log('\n🚚 Criando opções de frete...');
 
@@ -140,10 +141,14 @@ async function main() {
     data: {
       name: 'Frete Rodoviário Nacional',
       description: 'Transporte rodoviário dentro do Brasil',
-      paymentTerm: 30,
       unitPrice: 150.0,
       currency: Currency.BRL,
-      additionalCosts: 25.0,
+      originUf: 'SP',
+      originCity: 'São Paulo',
+      destinationUf: 'RJ',
+      destinationCity: 'Rio de Janeiro',
+      cargoType: 'Carga Seca',
+      operationType: FreightOperationType.INTERNAL,
       freightTaxes: {
         create: [
           { name: 'ICMS', rate: 12.0 },
@@ -158,10 +163,14 @@ async function main() {
     data: {
       name: 'Frete Marítimo Internacional',
       description: 'Transporte marítimo para importação',
-      paymentTerm: 60,
       unitPrice: 2500.0,
       currency: Currency.USD,
-      additionalCosts: 500.0,
+      originUf: 'EXTERIOR',
+      originCity: 'Shanghai',
+      destinationUf: 'SP',
+      destinationCity: 'Santos',
+      cargoType: 'Container 40 pés',
+      operationType: FreightOperationType.EXTERNAL,
       freightTaxes: {
         create: [
           { name: 'II (Imposto de Importação)', rate: 14.0 },
@@ -176,10 +185,14 @@ async function main() {
     data: {
       name: 'Frete Expresso',
       description: 'Entrega rápida para regiões metropolitanas',
-      paymentTerm: 15,
       unitPrice: 280.0,
       currency: Currency.BRL,
-      additionalCosts: 40.0,
+      originUf: 'SP',
+      originCity: 'Campinas',
+      destinationUf: 'SP',
+      destinationCity: 'São Paulo',
+      cargoType: 'Carga Fracionada',
+      operationType: FreightOperationType.INTERNAL,
       freightTaxes: {
         create: [
           { name: 'ICMS', rate: 12.0 },
@@ -313,8 +326,8 @@ async function main() {
       depreciation: 5000.0,
       totalCost: 80000.0,
       considerationPercentage: 100.0,
-      salesVolume: 10000.0, // Volume de vendas esperado
-      overheadPerUnit: 8.0, // 80000 / 10000
+      salesVolume: 10000.0,
+      overheadPerUnit: 8.0,
       calculationDate: new Date('2025-01-01'),
     },
   });
@@ -338,7 +351,7 @@ async function main() {
   console.log('✅ Custos fixos criados');
 
   // ============================================
-  // 5.5. GRUPOS DE PRODUTOS (NOVO!)
+  // 6. GRUPOS DE PRODUTOS
   // ============================================
   console.log('\n📂 Criando grupos de produtos...');
 
@@ -366,7 +379,7 @@ async function main() {
   console.log('✅ Grupos de produtos criados');
 
   // ============================================
-  // 6. PRODUTOS (COM GRUPOS!)
+  // 7. PRODUTOS
   // ============================================
   console.log('\n📦 Criando produtos...');
 
@@ -375,17 +388,17 @@ async function main() {
       code: '10001',
       name: 'Suporte Metálico Modelo A',
       description: 'Suporte estrutural em aço carbono com acabamento pintado',
-      creatorId: users[0].id, // Admin
+      creatorId: users[0].id,
       fixedCostId: fixedCost1.id,
-      productGroupId: productGroup1.id, // <- NOVO!
+      productGroupId: productGroup1.id,
       priceWithoutTaxesAndFreight: 125.5,
       priceWithTaxesAndFreight: 185.75,
       productRawMaterials: {
         create: [
-          { rawMaterialId: rawMaterials[0].id, quantity: 5.0 }, // Aço Carbono
-          { rawMaterialId: rawMaterials[3].id, quantity: 8.0 }, // Parafusos
-          { rawMaterialId: rawMaterials[4].id, quantity: 0.5 }, // Tinta
-          { rawMaterialId: rawMaterials[5].id, quantity: 1.0 }, // Embalagem
+          { rawMaterialId: rawMaterials[0].id, quantity: 5.0 },
+          { rawMaterialId: rawMaterials[3].id, quantity: 8.0 },
+          { rawMaterialId: rawMaterials[4].id, quantity: 0.5 },
+          { rawMaterialId: rawMaterials[5].id, quantity: 1.0 },
         ],
       },
     },
@@ -396,15 +409,15 @@ async function main() {
       code: '10002',
       name: 'Container Plástico Premium',
       description: 'Container de armazenamento em PEAD alta resistência',
-      creatorId: users[1].id, // Comercial
+      creatorId: users[1].id,
       fixedCostId: fixedCost1.id,
-      productGroupId: productGroup2.id, // <- NOVO!
+      productGroupId: productGroup2.id,
       priceWithoutTaxesAndFreight: 78.0,
       priceWithTaxesAndFreight: 112.5,
       productRawMaterials: {
         create: [
-          { rawMaterialId: rawMaterials[1].id, quantity: 2.5 }, // PEAD
-          { rawMaterialId: rawMaterials[5].id, quantity: 1.0 }, // Embalagem
+          { rawMaterialId: rawMaterials[1].id, quantity: 2.5 },
+          { rawMaterialId: rawMaterials[5].id, quantity: 1.0 },
         ],
       },
     },
@@ -415,17 +428,17 @@ async function main() {
       code: '10003',
       name: 'Peça Composta Industrial',
       description: 'Peça industrial com revestimento epóxi',
-      creatorId: users[0].id, // Admin
+      creatorId: users[0].id,
       fixedCostId: fixedCost2.id,
-      productGroupId: productGroup1.id, // <- NOVO!
+      productGroupId: productGroup1.id,
       priceWithoutTaxesAndFreight: 385.0,
       priceWithTaxesAndFreight: 520.0,
       productRawMaterials: {
         create: [
-          { rawMaterialId: rawMaterials[0].id, quantity: 12.0 }, // Aço
-          { rawMaterialId: rawMaterials[2].id, quantity: 1.5 }, // Resina Epóxi
-          { rawMaterialId: rawMaterials[3].id, quantity: 24.0 }, // Parafusos
-          { rawMaterialId: rawMaterials[5].id, quantity: 2.0 }, // Embalagem
+          { rawMaterialId: rawMaterials[0].id, quantity: 12.0 },
+          { rawMaterialId: rawMaterials[2].id, quantity: 1.5 },
+          { rawMaterialId: rawMaterials[3].id, quantity: 24.0 },
+          { rawMaterialId: rawMaterials[5].id, quantity: 2.0 },
         ],
       },
     },
@@ -436,20 +449,19 @@ async function main() {
       code: '10004',
       name: 'Kit Fixação Completo',
       description: 'Kit com componentes de fixação diversos',
-      creatorId: users[1].id, // Comercial
-      productGroupId: productGroup3.id, // <- NOVO!
+      creatorId: users[1].id,
+      productGroupId: productGroup3.id,
       priceWithoutTaxesAndFreight: 45.0,
       priceWithTaxesAndFreight: 58.5,
       productRawMaterials: {
         create: [
-          { rawMaterialId: rawMaterials[3].id, quantity: 50.0 }, // Parafusos
-          { rawMaterialId: rawMaterials[5].id, quantity: 1.0 }, // Embalagem
+          { rawMaterialId: rawMaterials[3].id, quantity: 50.0 },
+          { rawMaterialId: rawMaterials[5].id, quantity: 1.0 },
         ],
       },
     },
   });
 
-  // Produto sem grupo (para demonstrar que é opcional)
   const product5 = await prisma.product.create({
     data: {
       code: '10005',
@@ -457,12 +469,11 @@ async function main() {
       description: 'Produto avulso sem categoria definida',
       creatorId: users[0].id,
       fixedCostId: fixedCost1.id,
-      // productGroupId: null, <- Não precisa especificar, já é null por padrão
       priceWithoutTaxesAndFreight: 35.0,
       priceWithTaxesAndFreight: 48.0,
       productRawMaterials: {
         create: [
-          { rawMaterialId: rawMaterials[5].id, quantity: 1.0 }, // Embalagem
+          { rawMaterialId: rawMaterials[5].id, quantity: 1.0 },
         ],
       },
     },
@@ -471,7 +482,7 @@ async function main() {
   console.log('✅ Produtos criados com sucesso');
 
   // ============================================
-  // 7. LOGS DE ALTERAÇÃO (exemplo)
+  // 8. LOGS DE ALTERAÇÃO
   // ============================================
   console.log('\n📝 Criando logs de exemplo...');
 
@@ -481,7 +492,7 @@ async function main() {
       field: 'acquisitionPrice',
       oldValue: '8.00',
       newValue: '8.50',
-      changedBy: users[3].id, // Analista Fiscal
+      changedBy: users[3].id,
       changedAt: new Date(),
     },
   });
