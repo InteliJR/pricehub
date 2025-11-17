@@ -1,91 +1,213 @@
+// src/components/features/fixedCosts/FixedCostsSummaryTable.tsx
+
 import type { FixedCost } from '@/types';
 import { Text } from '@/components/common/Text';
-import { TableHeaderCell } from '@/components/common/ProductTableHeaderCell';
+import { IconButton } from '@/components/common/IconButton';
+import { FiEdit2, FiTrash2, FiChevronUp } from 'react-icons/fi';
+import { formatCurrency } from '@/lib/utils';
 
 interface FixedCostsSummaryTableProps {
   costs: FixedCost[];
+  onEdit: (cost: FixedCost) => void;
+  onDelete: (id: string) => void;
+  onSort: (column: string) => void;
+  sortBy: string;
+  sortOrder: 'asc' | 'desc';
 }
 
-// Helper (pode mover para lib/utils.ts)
-const formatCurrency = (value?: number) => {
-  if (value === undefined || value === null) return '-';
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value);
-};
+export function FixedCostsSummaryTable({
+  costs,
+  onEdit,
+  onDelete,
+  onSort,
+  sortBy,
+  sortOrder,
+}: FixedCostsSummaryTableProps) {
+  
+  const calculateTotals = (costs: FixedCost[]) => {
+    return costs.reduce((acc, cost) => {
+      acc.personnelExpenses += cost.personnelExpenses;
+      acc.generalExpenses += cost.generalExpenses;
+      acc.proLabore += cost.proLabore;
+      acc.depreciation += cost.depreciation;
+      acc.totalCost += cost.totalCost;
+      acc.overhead += cost.totalCost * (cost.considerationPercentage / 100);
+      return acc;
+    }, {
+      personnelExpenses: 0,
+      generalExpenses: 0,
+      proLabore: 0,
+      depreciation: 0,
+      totalCost: 0,
+      overhead: 0,
+    });
+  };
 
-// Helper para calcular totais
-const calculateTotals = (costs: FixedCost[]) => {
-  return costs.reduce((acc, cost) => {
-    const personnel = cost.personnel || 0;
-    const others = cost.others || 0;
-    const depreciation = cost.depreciation || 0;
-    const total = personnel + others + depreciation;
-    const overhead = (total * (cost.percentage / 100));
-
-    acc.personnel += personnel;
-    acc.others += others;
-    acc.depreciation += depreciation;
-    acc.total += total;
-    acc.overhead += overhead;
-    return acc;
-  }, { personnel: 0, others: 0, depreciation: 0, total: 0, overhead: 0 });
-};
-
-export function FixedCostsSummaryTable({ costs }: FixedCostsSummaryTableProps) {
   const totals = calculateTotals(costs);
+
+  /** Ícone animado com rotação suave */
+  const SortIcon = ({ column }: { column: string }) => {
+    const isActive = sortBy === column;
+
+    return (
+      <span
+        className={`
+          text-blue-600 w-4 h-4 transition-transform duration-200 
+          ${isActive ? 'opacity-100' : 'opacity-0'} 
+          ${isActive && sortOrder === 'desc' ? 'rotate-180' : ''}
+        `}
+      >
+        <FiChevronUp />
+      </span>
+    );
+  };
+
+  const SortableHeader = ({
+    column,
+    label,
+  }: {
+    column: string;
+    label: string;
+  }) => (
+    <th
+      onClick={() => onSort(column)}
+      aria-label={`Ordenar por ${label}`}
+      className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none transition-colors"
+    >
+      <span className="flex items-center gap-1">
+        {label}
+        <SortIcon column={column} />
+      </span>
+    </th>
+  );
 
   return (
     <div className="bg-white shadow-sm rounded-lg overflow-x-auto mb-8">
       <table className="w-full min-w-max">
         <thead className="bg-gray-50 border-b border-gray-200">
           <tr>
-            <TableHeaderCell>Descrição</TableHeaderCell>
-            <TableHeaderCell>Código</TableHeaderCell>
-            <TableHeaderCell sortable>Pessoal</TableHeaderCell>
-            <TableHeaderCell sortable>Outros</TableHeaderCell>
-            <TableHeaderCell>Depreciação</TableHeaderCell>
-            <TableHeaderCell>Total</TableHeaderCell>
-            <TableHeaderCell>% Gastos a Considerar</TableHeaderCell>
-            <TableHeaderCell>Overhead a considerar</TableHeaderCell>
+            <SortableHeader column="description" label="Descrição" />
+            <SortableHeader column="code" label="Código" />
+            <SortableHeader column="personnelExpenses" label="Pessoal" />
+            <SortableHeader column="generalExpenses" label="Outros" />
+            <SortableHeader column="proLabore" label="Pró-Labore" />
+            <SortableHeader column="depreciation" label="Depreciação" />
+            <SortableHeader column="totalCost" label="Total" />
+
+            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+              % Gastos
+            </th>
+
+            <SortableHeader column="overheadPerUnit" label="Overhead" />
+
+            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+              Ações
+            </th>
           </tr>
         </thead>
-        
-        {/* Corpo da Tabela */}
+
         <tbody>
           {costs.map((cost) => {
-            const total = (cost.personnel || 0) + (cost.others || 0) + (cost.depreciation || 0);
-            const overhead = total * (cost.percentage / 100);
-            
+            const overhead = cost.totalCost * (cost.considerationPercentage / 100);
+
             return (
-              <tr key={cost.id} className="border-b border-gray-200 odd:bg-white even:bg-gray-50">
-                <td className="px-4 py-3"><Text variant="caption" className="font-semibold text-gray-900">{cost.description}</Text></td>
-                <td className="px-4 py-3"><Text variant="caption">{cost.code || '-'}</Text></td>
-                <td className="px-4 py-3"><Text variant="caption">{formatCurrency(cost.personnel)}</Text></td>
-                <td className="px-4 py-3"><Text variant="caption">{formatCurrency(cost.others)}</Text></td>
-                <td className="px-4 py-3"><Text variant="caption">{formatCurrency(cost.depreciation)}</Text></td>
-                <td className="px-4 py-3"><Text variant="caption" className="font-semibold">{formatCurrency(total)}</Text></td>
-                <td className="px-4 py-3"><Text variant="caption">{cost.percentage}%</Text></td>
-                <td className="px-4 py-3"><Text variant="caption" className="font-semibold">{formatCurrency(overhead)}</Text></td>
+              <tr
+                key={cost.id}
+                className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
+              >
+                <td className="px-4 py-3">
+                  <Text variant="caption" className="font-semibold text-gray-900">
+                    {cost.description}
+                  </Text>
+                </td>
+                <td className="px-4 py-3">
+                  <Text variant="caption">{cost.code || '-'}</Text>
+                </td>
+                <td className="px-4 py-3">
+                  <Text variant="caption">{formatCurrency(cost.personnelExpenses)}</Text>
+                </td>
+                <td className="px-4 py-3">
+                  <Text variant="caption">{formatCurrency(cost.generalExpenses)}</Text>
+                </td>
+                <td className="px-4 py-3">
+                  <Text variant="caption">{formatCurrency(cost.proLabore)}</Text>
+                </td>
+                <td className="px-4 py-3">
+                  <Text variant="caption">{formatCurrency(cost.depreciation)}</Text>
+                </td>
+                <td className="px-4 py-3">
+                  <Text variant="caption" className="font-semibold">
+                    {formatCurrency(cost.totalCost)}
+                  </Text>
+                </td>
+                <td className="px-4 py-3">
+                  <Text variant="caption">{cost.considerationPercentage}%</Text>
+                </td>
+                <td className="px-4 py-3">
+                  <Text variant="caption" className="font-semibold">
+                    {formatCurrency(overhead)}
+                  </Text>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex gap-2">
+                    <IconButton
+                      icon={FiEdit2}
+                      aria-label="Editar custo fixo"
+                      onClick={() => onEdit(cost)}
+                      className="text-blue-600 hover:bg-blue-50 cursor-pointer"
+                    />
+                    <IconButton
+                      icon={FiTrash2}
+                      aria-label="Excluir custo fixo"
+                      onClick={() => onDelete(cost.id)}
+                      className="text-red-600 hover:bg-red-50 cursor-pointer"
+                    />
+                  </div>
+                </td>
               </tr>
             );
           })}
         </tbody>
 
-        {/* Rodapé da Tabela */}
         <tfoot className="bg-gray-50 border-t-2 border-gray-300">
           <tr>
-            <th className="px-4 py-3 text-left">
-              <Text variant="caption" className="font-bold uppercase text-gray-700">TOTAL GERAL</Text>
+            <th className="px-4 py-3 text-left" colSpan={2}>
+              <Text variant="caption" className="font-bold uppercase text-gray-700">
+                TOTAL GERAL
+              </Text>
             </th>
-            <th className="px-4 py-3"></th> {/* Código */}
-            <th className="px-4 py-3 text-left"><Text variant="caption" className="font-bold">{formatCurrency(totals.personnel)}</Text></th>
-            <th className="px-4 py-3 text-left"><Text variant="caption" className="font-bold">{formatCurrency(totals.others)}</Text></th>
-            <th className="px-4 py-3 text-left"><Text variant="caption" className="font-bold">{formatCurrency(totals.depreciation)}</Text></th>
-            <th className="px-4 py-3 text-left"><Text variant="caption" className="font-bold">{formatCurrency(totals.total)}</Text></th>
-            <th className="px-4 py-3"></th> {/* % */}
-            <th className="px-4 py-3 text-left"><Text variant="caption" className="font-bold">{formatCurrency(totals.overhead)}</Text></th>
+            <th className="px-4 py-3 text-left">
+              <Text variant="caption" className="font-bold">
+                {formatCurrency(totals.personnelExpenses)}
+              </Text>
+            </th>
+            <th className="px-4 py-3 text-left">
+              <Text variant="caption" className="font-bold">
+                {formatCurrency(totals.generalExpenses)}
+              </Text>
+            </th>
+            <th className="px-4 py-3 text-left">
+              <Text variant="caption" className="font-bold">
+                {formatCurrency(totals.proLabore)}
+              </Text>
+            </th>
+            <th className="px-4 py-3 text-left">
+              <Text variant="caption" className="font-bold">
+                {formatCurrency(totals.depreciation)}
+              </Text>
+            </th>
+            <th className="px-4 py-3 text-left">
+              <Text variant="caption" className="font-bold">
+                {formatCurrency(totals.totalCost)}
+              </Text>
+            </th>
+            <th />
+            <th className="px-4 py-3 text-left">
+              <Text variant="caption" className="font-bold">
+                {formatCurrency(totals.overhead)}
+              </Text>
+            </th>
+            <th />
           </tr>
         </tfoot>
       </table>

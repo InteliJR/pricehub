@@ -1,86 +1,215 @@
 // src/components/features/fixedCosts/FixedCostForm.tsx
 
-import React from 'react';
-import type { FixedCost } from '@/types';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import type { FixedCost, FixedCostFormData } from '@/types';
 import { Input } from '@/components/common/Input';
 import { Label } from '@/components/common/Label';
+import { CurrencyInput } from '@/components/common/CurrencyInput';
+import { formatCurrency } from '@/lib/utils';
+import { Text } from '@/components/common/Text';
 
 interface FixedCostFormProps {
-  cost?: FixedCost;
+  cost?: FixedCost | null;
+  onSubmit: (data: FixedCostFormData) => void;
+  isLoading?: boolean;
 }
 
-export function FixedCostForm({ cost }: FixedCostFormProps) {
+export function FixedCostForm({ cost, onSubmit, isLoading }: FixedCostFormProps) {
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors },
+  } = useForm<FixedCostFormData>({
+    defaultValues: cost ? {
+      description: cost.description,
+      code: cost.code || '',
+      personnelExpenses: cost.personnelExpenses,
+      generalExpenses: cost.generalExpenses,
+      proLabore: cost.proLabore,
+      depreciation: cost.depreciation,
+      considerationPercentage: cost.considerationPercentage,
+      salesVolume: cost.salesVolume,
+    } : {
+      description: '',
+      code: '',
+      personnelExpenses: 0,
+      generalExpenses: 0,
+      proLabore: 0,
+      depreciation: 0,
+      considerationPercentage: 100,
+      salesVolume: 0,
+    },
+  });
+
+  // Watch dos valores para cálculos em tempo real
+  const personnelExpenses = watch('personnelExpenses') || 0;
+  const generalExpenses = watch('generalExpenses') || 0;
+  const proLabore = watch('proLabore') || 0;
+  const depreciation = watch('depreciation') || 0;
+  const considerationPercentage = watch('considerationPercentage') || 0;
+  const salesVolume = watch('salesVolume') || 0;
+
+  // Cálculos automáticos
+  const totalCost = personnelExpenses + generalExpenses + proLabore + depreciation;
+  const overheadToConsider = totalCost * (considerationPercentage / 100);
+  const overheadPerUnit = salesVolume > 0 ? overheadToConsider / salesVolume : 0;
+
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      
-      {/* Campo Descrição */}
-      <div className="sm:col-span-2">
-        <Label htmlFor="fc_description">Descrição</Label>
-        <Input 
-          id="fc_description" 
-          placeholder="Insira a descrição" 
-          defaultValue={cost?.description}
-        />
-      </div>
-      
-      {/* Campo Código */}
-      <div className="sm:col-span-1">
-        <Label htmlFor="fc_code">Código (Opcional)</Label>
-        <Input 
-          id="fc_code" 
-          placeholder="Insira o código" 
-          defaultValue={cost?.code}
-        />
-      </div>
-      
-      {/* Campo % Gastos a Considerar */}
-      <div className="sm:col-span-1">
-        <Label htmlFor="fc_percentage">% Gastos a Considerar</Label>
-        <Input 
-          id="fc_percentage" 
-          type="number"
-          placeholder="100" 
-          defaultValue={cost?.percentage}
-        />
+    <form id="fixed-cost-form" onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      {/* Seção 1: Informações Básicas */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <Label htmlFor="description">
+            Descrição <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="description"
+            placeholder="Ex: DESPESAS COM PESSOAL"
+            {...register('description', { 
+              required: 'Descrição é obrigatória',
+              minLength: { value: 3, message: 'Mínimo de 3 caracteres' }
+            })}
+            error={errors.description?.message}
+          />
+        </div>
+
+        <div className="sm:col-span-1">
+          <Label htmlFor="code">Código (Opcional)</Label>
+          <Input
+            id="code"
+            placeholder="Ex: FC-001"
+            {...register('code')}
+          />
+        </div>
+
+        <div className="sm:col-span-1">
+          <Label htmlFor="considerationPercentage">
+            % Gastos a Considerar <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="considerationPercentage"
+            type="number"
+            step="0.01"
+            min="0"
+            max="100"
+            placeholder="100"
+            {...register('considerationPercentage', {
+              required: 'Percentual é obrigatório',
+              min: { value: 0, message: 'Mínimo: 0%' },
+              max: { value: 100, message: 'Máximo: 100%' },
+              valueAsNumber: true,
+            })}
+            error={errors.considerationPercentage?.message}
+          />
+          <p className="text-xs text-gray-500 mt-1">Percentual entre 0% e 100%</p>
+        </div>
       </div>
 
-      {/* --- CUSTOS --- */}
-      
-      {/* Campo Pessoal */}
-      <div className="sm:col-span-1">
-        <Label htmlFor="fc_personnel">Pessoal</Label>
-        <Input 
-          id="fc_personnel" 
-          type="number"
-          step="0.01"
-          placeholder="0.00" 
-          defaultValue={cost?.personnel}
-        />
-      </div>
-      
-      {/* Campo Outros */}
-      <div className="sm:col-span-1">
-        <Label htmlFor="fc_others">Outros</Label>
-        <Input 
-          id="fc_others" 
-          type="number"
-          step="0.01"
-          placeholder="0.00" 
-          defaultValue={cost?.others}
-        />
+      {/* Seção 2: Custos */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Custos</h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="personnelExpenses">
+              Pessoal <span className="text-red-500">*</span>
+            </Label>
+            <CurrencyInput
+              id="personnelExpenses"
+              currency="BRL"
+              value={personnelExpenses}
+              onChange={(value) => setValue('personnelExpenses', value)}
+              placeholder="R$ 0,00"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="generalExpenses">
+              Outros <span className="text-red-500">*</span>
+            </Label>
+            <CurrencyInput
+              id="generalExpenses"
+              currency="BRL"
+              value={generalExpenses}
+              onChange={(value) => setValue('generalExpenses', value)}
+              placeholder="R$ 0,00"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="proLabore">Pró-Labore</Label>
+            <CurrencyInput
+              id="proLabore"
+              currency="BRL"
+              value={proLabore}
+              onChange={(value) => setValue('proLabore', value)}
+              placeholder="R$ 0,00"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="depreciation">Depreciação</Label>
+            <CurrencyInput
+              id="depreciation"
+              currency="BRL"
+              value={depreciation}
+              onChange={(value) => setValue('depreciation', value)}
+              placeholder="R$ 0,00"
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Campo Depreciação */}
-      <div className="sm:col-span-1">
-        <Label htmlFor="fc_depreciation">Depreciação</Label>
-        <Input 
-          id="fc_depreciation" 
+      {/* Seção 3: Volume de Vendas */}
+      <div>
+        <Label htmlFor="salesVolume">
+          Volume de Vendas <span className="text-red-500">*</span>
+        </Label>
+        <Input
+          id="salesVolume"
           type="number"
           step="0.01"
-          placeholder="0.00" 
-          defaultValue={cost?.depreciation}
+          min="0"
+          placeholder="130000.00"
+          {...register('salesVolume', {
+            required: 'Volume de vendas é obrigatório',
+            min: { value: 0.01, message: 'Deve ser maior que 0' },
+            valueAsNumber: true,
+          })}
+          error={errors.salesVolume?.message}
         />
+        <p className="text-xs text-gray-500 mt-1">
+          Volume para cálculo do overhead (em unidades de medida)
+        </p>
       </div>
-    </div>
+
+      {/* Preview dos Cálculos */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+        <Text className="font-semibold text-blue-900">Preview de Cálculo</Text>
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <div>
+            <Text className="text-gray-600">Total de Custos:</Text>
+            <Text className="font-semibold">{formatCurrency(totalCost)}</Text>
+          </div>
+          <div>
+            <Text className="text-gray-600">Overhead a Considerar:</Text>
+            <Text className="font-semibold">{formatCurrency(overheadToConsider)}</Text>
+          </div>
+          <div className="col-span-2 pt-2 border-t border-blue-300">
+            <Text className="text-gray-600">Overhead por Unidade:</Text>
+            <Text className="font-bold text-lg text-blue-900">
+              {formatCurrency(overheadPerUnit)}
+            </Text>
+          </div>
+        </div>
+      </div>
+
+      {/* Nota sobre campos obrigatórios */}
+      <p className="text-xs text-gray-500">
+        <span className="text-red-500">*</span> Campos obrigatórios
+      </p>
+    </form>
   );
 }
