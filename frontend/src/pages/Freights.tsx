@@ -2,7 +2,7 @@
 export default function Freights() {
   return (
     <div>
-      <h1>Premissas</h1>
+      <h1>Frete</h1>
       <p>Página em construção...</p>
     </div>
   );

@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   Boxes,
+  Layers,
   Component,
   Landmark,
   Truck,
@@ -10,13 +11,18 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/lib/utils';
-import type { UserRole } from '@/types/api';
 
 const navItems = [
   {
     label: 'Produtos',
     path: '/produtos',
     icon: Boxes,
+    allowedRoles: ['ADMIN', 'COMERCIAL'],
+  },
+  {
+    label: 'Grupos',
+    path: '/grupos',
+    icon: Layers,
     allowedRoles: ['ADMIN', 'COMERCIAL'],
   },
   {
@@ -68,6 +74,7 @@ export function Sidebar() {
         <Building className="h-6 w-6" />
         <span className="text-xl font-semibold">GR Water</span>
       </div>
+
       <nav className="flex flex-1 flex-col gap-1 mt-4">
         {accessibleNavItems.map((item) => (
           <NavLink
