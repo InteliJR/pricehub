@@ -1,57 +1,291 @@
-import { useState } from 'react';
-import type { FixedCost, OverheadGroup } from '@/types'; 
-import { PageHeader } from '@/components/features/fixedCosts/PageHeader';
-import { FixedCostsSummaryTable } from '@/components/features/fixedCosts/FixedCostsSummaryTable';
-import { OverheadGroupsTable } from '@/components/features/fixedCosts/OverheadGroupsTable';
+// src/pages/FixedCosts.tsx
 
-import { FixedCostModal } from '@/components/features/fixedCosts/FixedCostModal'; 
-
-const mockFixedCosts: FixedCost[] = [
-  { id: '1', description: 'DESPESAS COM PESSOAL', code: '', personnel: 53188.59, percentage: 100 },
-  { id: '2', description: 'GASTOS GERAIS API', code: '', others: 49913.50, percentage: 100 },
-  { id: '3', description: 'PRÓ LABORE ***', code: '', percentage: 100 },
-];
+import { useState, useEffect } from "react";
+import { toast } from "react-hot-toast";
+import type { FixedCost, OverheadGroup } from "@/types";
+import { PageHeader } from "@/components/features/fixedCosts/PageHeader";
+import { FixedCostsSummaryTable } from "@/components/features/fixedCosts/FixedCostsSummaryTable";
+import { OverheadGroupsTable } from "@/components/features/fixedCosts/OverheadGroupsTable";
+import { FixedCostModal } from "@/components/features/fixedCosts/FixedCostModal";
+import { ExportModal } from "@/components/features/fixedCosts/ExportModal";
+import { ConfirmModal } from "@/components/common/ConfirmModal";
+import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import { Pagination } from "@/components/common/Pagination";
+import {
+  useFixedCostsQuery,
+  useDeleteFixedCostMutation,
+  useExportFixedCostsMutation,
+} from "@/api/fixedCosts";
+import { useDebounce } from "@/hooks/useDebounce";
+import { triggerCsvDownload } from "@/lib/utils";
 
 const mockOverheadGroups: OverheadGroup[] = [
-  { id: 'g1', groupName: 'Grupo 01', unit: 'Quilograma', salesVolume: 165000, overheadValue: 0.365 },
-  { id: 'g2', groupName: 'Grupo 02', unit: 'Quilograma', salesVolume: 145000, overheadValue: 0.365 },
-  { id: 'g3', groupName: 'Grupo 03', unit: 'Quilograma', salesVolume: 130000, overheadValue: 0.365 },
-  { id: 'g4', groupName: 'Grupo 04', unit: 'Quilograma', salesVolume: 130000, overheadValue: 0.365 },
-  { id: 'g5', groupName: 'Grupo 05', unit: 'Quilograma', salesVolume: 130000, overheadValue: 0.365 },
-  { id: 'g6', groupName: 'Grupo 06', unit: 'Quilograma', salesVolume: 130000, overheadValue: 0.365 },
-  { id: 'g7', groupName: 'Grupo 07', unit: 'Quilograma', salesVolume: 130000, overheadValue: 0.365 },
+  {
+    id: "g1",
+    groupName: "Grupo 01",
+    unit: "Quilograma",
+    salesVolume: 165000,
+    overheadValue: 0.365,
+  },
+  {
+    id: "g2",
+    groupName: "Grupo 02",
+    unit: "Quilograma",
+    salesVolume: 145000,
+    overheadValue: 0.365,
+  },
+  {
+    id: "g3",
+    groupName: "Grupo 03",
+    unit: "Quilograma",
+    salesVolume: 130000,
+    overheadValue: 0.365,
+  },
+];
+
+const EXPORT_COLUMNS = [
+  { key: "code", label: "Código" },
+  { key: "description", label: "Descrição" },
+  { key: "personnelExpenses", label: "Pessoal" },
+  { key: "generalExpenses", label: "Outros" },
+  { key: "proLabore", label: "Pró-Labore" },
+  { key: "depreciation", label: "Depreciação" },
+  { key: "totalCost", label: "Total" },
+  { key: "considerationPercentage", label: "% Considerar" },
+  { key: "salesVolume", label: "Volume Vendas" },
+  { key: "overheadPerUnit", label: "Overhead/Unidade" },
 ];
 
 export default function FixedCosts() {
-  const [costs] = useState(mockFixedCosts);
-  const [groups] = useState(mockOverheadGroups);
-  
-  // Lógica para o modal
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Estados
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("calculationDate");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
+  // Modais
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [editingCost, setEditingCost] = useState<FixedCost | null>(null);
+  const [deletingCostId, setDeletingCostId] = useState<string | null>(null);
+
+  // Queries e Mutations
+  const { data, isLoading, isError, isFetching, refetch } = useFixedCostsQuery({
+    page,
+    limit,
+    search,
+    sortBy,
+    sortOrder,
+  });
+
+  const deleteMutation = useDeleteFixedCostMutation();
+  const exportMutation = useExportFixedCostsMutation();
+
+  // Debounce na busca
+  const debouncedSetSearch = useDebounce((value: string) => {
+    setSearch(value);
+    setPage(1);
+  }, 300);
+
+  // Handler para mudança no input
+  const handleSearchChange = (value: string) => {
+    setSearchInput(value);
+    debouncedSetSearch(value);
+  };
+
+  // Refetch quando sortBy ou sortOrder mudam
+  useEffect(() => {
+    refetch();
+  }, [sortBy, sortOrder, refetch]);
+
+  // Handlers
   const handleOpenCreateModal = () => {
-    setIsModalOpen(true); // Conecta a abertura do modal
+    setEditingCost(null);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (cost: FixedCost) => {
+    setEditingCost(cost);
+    setIsModalOpen(true);
   };
 
   const handleCloseModal = () => {
-    setIsModalOpen(false); // Conecta o fechamento do modal
+    setIsModalOpen(false);
+    setEditingCost(null);
   };
 
-  return (
-    <> 
-      {/* Passa a função de abertura para o header */}
-      <PageHeader onNewFixedCostClick={handleOpenCreateModal} />
-      
-      {/* Primeira Tabela */}
-      <FixedCostsSummaryTable costs={costs} />
-      
-      {/* Segunda Tabela */}
-      <OverheadGroupsTable groups={groups} />
+  const handleDelete = async () => {
+    if (!deletingCostId) return;
 
-      {/* Renderiza o modal (ele só aparece quando 'isOpen' é true) */}
-      <FixedCostModal 
-        isOpen={isModalOpen} 
-        onClose={handleCloseModal} 
+    try {
+      await deleteMutation.mutateAsync(deletingCostId);
+      toast.success("Custo fixo excluído com sucesso");
+      setDeletingCostId(null);
+    } catch (error) {
+      toast.error("Erro ao excluir custo fixo");
+    }
+  };
+
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      // Alterna a ordem
+      const newOrder = sortOrder === "asc" ? "desc" : "asc";
+      setSortOrder(newOrder);
+    } else {
+      // Nova coluna, começa com desc (mais comum para números/datas)
+      setSortBy(column);
+      setSortOrder("desc");
+    }
+  };
+
+  const handleExport = async (options: {
+    limit: number;
+    columns: string[];
+    sortBy: string;
+    sortOrder: "asc" | "desc";
+  }) => {
+    try {
+      const blob = await exportMutation.mutateAsync({
+        format: "csv",
+        limit: options.limit,
+        sortBy: options.sortBy,
+        sortOrder: options.sortOrder,
+        columns: options.columns,
+        includeProducts: true,
+      });
+
+      const filename = `custos-fixos-${
+        new Date().toISOString().split("T")[0]
+      }.csv`;
+      triggerCsvDownload(blob, filename);
+      toast.success("CSV exportado com sucesso");
+      setIsExportModalOpen(false);
+    } catch (error) {
+      toast.error("Erro ao exportar CSV");
+    }
+  };
+
+  // Render
+  if (isLoading) {
+    return (
+      <>
+        <PageHeader
+          onNewFixedCostClick={handleOpenCreateModal}
+          onExportClick={() => setIsExportModalOpen(true)}
+          onSearchChange={handleSearchChange}
+          searchValue={searchInput}
+        />
+        <LoadingSpinner size="lg" />
+      </>
+    );
+  }
+
+  if (isError) {
+    return (
+      <>
+        <PageHeader
+          onNewFixedCostClick={handleOpenCreateModal}
+          onExportClick={() => setIsExportModalOpen(true)}
+          onSearchChange={handleSearchChange}
+          searchValue={searchInput}
+        />
+        <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+          <p className="text-red-600 font-semibold">
+            Erro ao carregar custos fixos
+          </p>
+          <p className="text-sm text-gray-500 mt-2">
+            Tente recarregar a página ou entre em contato com o suporte
+          </p>
+        </div>
+      </>
+    );
+  }
+
+  const hasCosts = data?.data && data.data.length > 0;
+
+  return (
+    <>
+      <PageHeader
+        onNewFixedCostClick={handleOpenCreateModal}
+        onExportClick={() => setIsExportModalOpen(true)}
+        onSearchChange={handleSearchChange}
+        searchValue={searchInput}
+      />
+
+      {!hasCosts && !search ? (
+        <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+          <p className="text-gray-500">Nenhum custo fixo cadastrado</p>
+          <p className="text-sm text-gray-400 mt-2">
+            Clique em "Novo custo fixo" para começar
+          </p>
+        </div>
+      ) : !hasCosts && search ? (
+        <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+          <p className="text-gray-500">
+            Nenhum resultado encontrado para "{search}"
+          </p>
+        </div>
+      ) : hasCosts ? (
+        <>
+          {isFetching && (
+            <div className="mb-2 text-sm text-blue-600 text-right animate-pulse">
+              🔄 Atualizando...
+            </div>
+          )}
+
+          <FixedCostsSummaryTable
+            costs={data.data}
+            onEdit={handleOpenEditModal}
+            onDelete={(id) => setDeletingCostId(id)}
+            onSort={handleSort}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+          />
+
+          {data.meta && data.meta.totalPages > 1 && (
+            <div className="mb-8">
+              <Pagination
+                currentPage={page}
+                totalPages={data.meta.totalPages}
+                onPageChange={setPage}
+              />
+            </div>
+          )}
+        </>
+      ) : null}
+
+      <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+        <p className="text-sm text-yellow-800">
+          ⚠️ <strong>Grupos de Overhead:</strong> Esta funcionalidade ainda
+          precisa ser implementada. Os dados abaixo são apenas exemplos
+          mockados.
+        </p>
+      </div>
+      <OverheadGroupsTable groups={mockOverheadGroups} />
+
+      {/* Modais */}
+      <FixedCostModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        cost={editingCost}
+      />
+
+      <ConfirmModal
+        isOpen={!!deletingCostId}
+        onClose={() => setDeletingCostId(null)}
+        onConfirm={handleDelete}
+        title="Excluir Custo Fixo"
+        message="Tem certeza que deseja excluir este custo fixo? Os produtos associados terão o custo fixo removido."
+        confirmText="Excluir"
+      />
+
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        onConfirm={handleExport}
+        defaultColumns={EXPORT_COLUMNS}
       />
     </>
   );
