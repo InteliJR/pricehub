@@ -1,14 +1,15 @@
 import { NavLink } from "react-router-dom";
 import {
   Boxes,
+  Layers,
   Component,
   Landmark,
   Truck,
   PieChart,
   Users,
 } from "lucide-react";
-import { useAuthStore } from "@/store/authStore";
-import { cn } from "@/lib/utils";
+import { useAuthStore } from '@/store/authStore';
+import { cn } from '@/lib/utils';
 
 const navItems = [
   {
@@ -20,6 +21,18 @@ const navItems = [
   {
     label: "Matérias-primas",
     path: "/materias-primas",
+    icon: Layers,
+    allowedRoles: ['ADMIN', 'COMERCIAL'],
+  },
+  {
+    label: 'Grupos',
+    path: '/grupos',
+    icon: Layers,
+    allowedRoles: ['ADMIN', 'COMERCIAL'],
+  },
+  {
+    label: 'Matérias-primas',
+    path: '/materias-primas',
     icon: Component,
     allowedRoles: ["ADMIN", "COMERCIAL", "IMPOSTO"],
   },
