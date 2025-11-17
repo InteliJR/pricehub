@@ -97,14 +97,27 @@ enum Currency {
   EUR
 }
 
+enum FreightOperationType {
+  INTERNAL
+  EXTERNAL
+}
+
 model Freight {
   id               String   @id @default(uuid())
   name             String
   description      String?  @db.Text
-  paymentTerm      Int // dias
+  
   unitPrice        Decimal  @db.Decimal(12, 2)
   currency         Currency @default(BRL)
-  additionalCosts  Decimal  @default(0) @db.Decimal(12, 2)
+
+  // NOVOS CAMPOS
+  originUf         String
+  originCity       String
+  destinationUf    String
+  destinationCity  String
+  cargoType        String            // tipo da carga
+  operationType    FreightOperationType // interno ou externo
+
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

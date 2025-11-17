@@ -225,6 +225,8 @@ export default function ProductGroups() {
         </>
       )}
 
+      <p className="mt-10">ISSO TEM QUE IR PRA PARTE DE GRUPOS E VIRA UMA COLUNA. COLOCAR SO UMA DESCRIÇÃO DEPOIS DA TABELA.</p>
+
       <ProductGroupModal
         isOpen={isModalOpen}
         onClose={() => {

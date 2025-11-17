@@ -19,12 +19,6 @@ const navItems = [
     allowedRoles: ["ADMIN", "COMERCIAL"],
   },
   {
-    label: "Matérias-primas",
-    path: "/materias-primas",
-    icon: Layers,
-    allowedRoles: ['ADMIN', 'COMERCIAL'],
-  },
-  {
     label: 'Grupos',
     path: '/grupos',
     icon: Layers,
