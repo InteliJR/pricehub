@@ -1,43 +1,25 @@
+
+// =============================================
+// src/freights/dto/create-freight.dto.ts
+// =============================================
+
 import {
   IsString,
   IsNotEmpty,
   IsOptional,
-  IsInt,
-  IsPositive,
   IsNumber,
   IsEnum,
-  Min,
+  IsPositive,
   MaxLength,
   IsArray,
   ValidateNested,
   ArrayMinSize,
+  Matches,
 } from 'class-validator';
-import { Currency } from '@prisma/client';
+import { Currency, FreightOperationType } from '@prisma/client';
 import { Type } from 'class-transformer';
+import { CreateFreightTaxDto } from './create-freight-tax.dto';
 
-/**
- * DTO para criar impostos do frete junto com o frete
- */
-export class CreateFreightTaxDto {
-  @IsString()
-  @IsNotEmpty({ message: 'O nome do imposto é obrigatório' })
-  @MaxLength(100, {
-    message: 'O nome do imposto deve ter no máximo 100 caracteres',
-  })
-  name: string; // ICMS, PIS, COFINS, IPI, etc
-
-  @IsNumber(
-    { maxDecimalPlaces: 2 },
-    { message: 'A taxa deve ter no máximo 2 casas decimais' },
-  )
-  @Min(0, { message: 'A taxa não pode ser negativa' })
-  @Type(() => Number)
-  rate: number; // Ex: 7.60 (%)
-}
-
-/**
- * DTO para criação de um novo frete
- */
 export class CreateFreightDto {
   @IsString()
   @IsNotEmpty({ message: 'O nome do frete é obrigatório' })
@@ -51,11 +33,6 @@ export class CreateFreightDto {
   })
   description?: string;
 
-  @IsInt({ message: 'O prazo de pagamento deve ser um número inteiro' })
-  @IsPositive({ message: 'O prazo de pagamento deve ser positivo' })
-  @Type(() => Number)
-  paymentTerm: number; // em dias
-
   @IsNumber(
     { maxDecimalPlaces: 2 },
     { message: 'O preço unitário deve ter no máximo 2 casas decimais' },
@@ -65,22 +42,45 @@ export class CreateFreightDto {
   unitPrice: number;
 
   @IsEnum(Currency, { message: 'Moeda inválida. Use BRL, USD ou EUR' })
-  @IsOptional()
-  currency?: Currency = Currency.BRL;
+  currency: Currency;
 
-  @IsNumber(
-    { maxDecimalPlaces: 2 },
-    { message: 'Os custos adicionais devem ter no máximo 2 casas decimais' },
-  )
-  @Min(0, { message: 'Os custos adicionais não podem ser negativos' })
-  @IsOptional()
-  @Type(() => Number)
-  additionalCosts?: number = 0;
+  @IsString()
+  @IsNotEmpty({ message: 'O UF de origem é obrigatório' })
+  @MaxLength(2, { message: 'O UF deve ter 2 caracteres' })
+  @Matches(/^[A-Z]{2}$/, { message: 'O UF deve conter apenas letras maiúsculas' })
+  originUf: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'A cidade de origem é obrigatória' })
+  @MaxLength(100, { message: 'A cidade deve ter no máximo 100 caracteres' })
+  originCity: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'O UF de destino é obrigatório' })
+  @MaxLength(2, { message: 'O UF deve ter 2 caracteres' })
+  @Matches(/^[A-Z]{2}$/, { message: 'O UF deve conter apenas letras maiúsculas' })
+  destinationUf: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'A cidade de destino é obrigatória' })
+  @MaxLength(100, { message: 'A cidade deve ter no máximo 100 caracteres' })
+  destinationCity: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'O tipo de carga é obrigatório' })
+  @MaxLength(100, { message: 'O tipo de carga deve ter no máximo 100 caracteres' })
+  cargoType: string;
+
+  @IsEnum(FreightOperationType, {
+    message: 'Tipo de operação inválido. Use INTERNAL ou EXTERNAL',
+  })
+  operationType: FreightOperationType;
 
   @IsArray({ message: 'Os impostos devem ser um array' })
   @ValidateNested({ each: true })
-  @ArrayMinSize(0)
+  @ArrayMinSize(0, { message: 'Deve haver pelo menos 0 impostos' })
   @Type(() => CreateFreightTaxDto)
   @IsOptional()
   freightTaxes?: CreateFreightTaxDto[];
 }
+

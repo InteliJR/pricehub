@@ -1,6 +1,6 @@
 // src/components/features/freights/FreightForm.tsx
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import type { Freight } from "@/types/freights";
 import type { CreateFreightDTO } from "@/api/freights";
@@ -16,7 +16,6 @@ import { Text } from "@/components/common/Text";
 import { FiPlus, FiTrash2 } from "react-icons/fi";
 import { formatCurrency } from "@/lib/utils";
 
-// ⬇️ Você substituirá pelas suas listas completas
 const estados: string[] = [
   "AC",
   "AL",
@@ -82,11 +81,20 @@ interface FreightFormProps {
   isLoading?: boolean;
 }
 
+// Função auxiliar para validar strings (não permite apenas espaços)
+const validateNotEmpty = (value: string | undefined): boolean => {
+  return !!value && value.trim().length > 0;
+};
+
 export function FreightForm({
   freight,
   onSubmit,
   isLoading,
 }: FreightFormProps) {
+  // ✅ Refs para controlar a primeira mudança de UF (não a primeira renderização)
+  const originUfPreviousValue = useRef<string>("");
+  const destinationUfPreviousValue = useRef<string>("");
+
   const {
     register,
     handleSubmit,
@@ -129,25 +137,46 @@ export function FreightForm({
     name: "freightTaxes",
   });
 
-  const unitPrice = watch("unitPrice") || 0;
+  const unitPrice = Number(watch("unitPrice")) || 0;
   const currency = watch("currency");
   const freightTaxes = watch("freightTaxes") || [];
 
-  // Atualiza cidades automaticamente ao trocar o estado
+  // Watch UFs
   const originUfWatch = watch("originUf");
   const destinationUfWatch = watch("destinationUf");
 
+  // ✅ CORREÇÃO: Só limpa cidade quando UF realmente MUDAR (não no mount inicial)
   useEffect(() => {
-    setValue("originCity", "");
-  }, [originUfWatch]);
+    // Se é a primeira vez que está sendo definido, apenas salva o valor
+    if (originUfPreviousValue.current === "") {
+      originUfPreviousValue.current = originUfWatch;
+      return;
+    }
+
+    // Se mudou de verdade (não é vazio para vazio), limpa a cidade
+    if (originUfPreviousValue.current !== originUfWatch) {
+      setValue("originCity", "");
+      originUfPreviousValue.current = originUfWatch;
+    }
+  }, [originUfWatch, setValue]);
 
   useEffect(() => {
-    setValue("destinationCity", "");
-  }, [destinationUfWatch]);
+    // Se é a primeira vez que está sendo definido, apenas salva o valor
+    if (destinationUfPreviousValue.current === "") {
+      destinationUfPreviousValue.current = destinationUfWatch;
+      return;
+    }
+
+    // Se mudou de verdade (não é vazio para vazio), limpa a cidade
+    if (destinationUfPreviousValue.current !== destinationUfWatch) {
+      setValue("destinationCity", "");
+      destinationUfPreviousValue.current = destinationUfWatch;
+    }
+  }, [destinationUfWatch, setValue]);
 
   // Cálculo dos impostos
   const totalTaxes = freightTaxes.reduce((sum, tax) => {
-    const rate = typeof tax.rate === "string" ? parseFloat(tax.rate) : tax.rate;
+    const rate = Number(tax.rate) || 0;
     return sum + unitPrice * (rate / 100);
   }, 0);
 
@@ -157,10 +186,26 @@ export function FreightForm({
     append({ name: "", rate: 0 });
   };
 
+  // Handler de submit com limpeza de strings
+  const handleFormSubmit = (data: CreateFreightDTO) => {
+    // Limpa espaços em branco extras
+    const cleanedData = {
+      ...data,
+      name: data.name.trim(),
+      description: data.description?.trim() || "",
+      cargoType: data.cargoType.trim(),
+      freightTaxes: data.freightTaxes.map(tax => ({
+        ...tax,
+        name: tax.name.trim(),
+      })),
+    };
+    onSubmit(cleanedData);
+  };
+
   return (
     <form
       id="freight-form"
-      onSubmit={handleSubmit(onSubmit)}
+      onSubmit={handleSubmit(handleFormSubmit)}
       className="max-h-[70vh] overflow-y-auto px-2 space-y-6"
     >
       {/* ==========================================================
@@ -183,8 +228,18 @@ export function FreightForm({
               maxLength={80}
               {...register("name", {
                 required: "Nome é obrigatório",
-                minLength: { value: 3, message: "Mínimo de 3 caracteres" },
-                maxLength: { value: 80, message: "Máximo de 80 caracteres" },
+                validate: {
+                  notEmpty: (value) =>
+                    validateNotEmpty(value) || "Nome não pode conter apenas espaços",
+                },
+                minLength: { 
+                  value: 3, 
+                  message: "Nome deve ter no mínimo 3 caracteres" 
+                },
+                maxLength: { 
+                  value: 80, 
+                  message: "Nome deve ter no máximo 80 caracteres" 
+                },
               })}
               error={errors.name?.message}
             />
@@ -199,7 +254,12 @@ export function FreightForm({
               rows={4}
               maxLength={400}
               className="min-h-[100px] max-h-[240px]"
-              {...register("description")}
+              {...register("description", {
+                maxLength: { 
+                  value: 400, 
+                  message: "Descrição deve ter no máximo 400 caracteres" 
+                },
+              })}
             />
             <Text className="text-xs text-gray-400 mt-1">
               Máximo de 400 caracteres
@@ -217,7 +277,14 @@ export function FreightForm({
               maxLength={60}
               {...register("cargoType", {
                 required: "Tipo de carga é obrigatório",
-                maxLength: { value: 60, message: "Máximo de 60 caracteres" },
+                validate: {
+                  notEmpty: (value) =>
+                    validateNotEmpty(value) || "Tipo de carga não pode conter apenas espaços",
+                },
+                maxLength: { 
+                  value: 60, 
+                  message: "Tipo de carga deve ter no máximo 60 caracteres" 
+                },
               })}
               error={errors.cargoType?.message}
             />
@@ -259,6 +326,10 @@ export function FreightForm({
               id="originUf"
               {...register("originUf", {
                 required: "UF de origem é obrigatória",
+                validate: {
+                  notEmpty: (value) =>
+                    validateNotEmpty(value) || "Selecione uma UF de origem",
+                },
               })}
               error={errors.originUf?.message}
             >
@@ -281,6 +352,10 @@ export function FreightForm({
               disabled={!originUfWatch}
               {...register("originCity", {
                 required: "Cidade de origem é obrigatória",
+                validate: {
+                  notEmpty: (value) =>
+                    validateNotEmpty(value) || "Selecione uma cidade de origem",
+                },
               })}
               error={errors.originCity?.message}
             >
@@ -303,6 +378,10 @@ export function FreightForm({
               id="destinationUf"
               {...register("destinationUf", {
                 required: "UF de destino é obrigatória",
+                validate: {
+                  notEmpty: (value) =>
+                    validateNotEmpty(value) || "Selecione uma UF de destino",
+                },
               })}
               error={errors.destinationUf?.message}
             >
@@ -325,6 +404,10 @@ export function FreightForm({
               disabled={!destinationUfWatch}
               {...register("destinationCity", {
                 required: "Cidade de destino é obrigatória",
+                validate: {
+                  notEmpty: (value) =>
+                    validateNotEmpty(value) || "Selecione uma cidade de destino",
+                },
               })}
               error={errors.destinationCity?.message}
             >
@@ -355,9 +438,16 @@ export function FreightForm({
               id="unitPrice"
               value={unitPrice}
               currency={currency}
-              onChange={(value) => setValue("unitPrice", value)}
+              onChange={(value) => setValue("unitPrice", value, { 
+                shouldValidate: true 
+              })}
               placeholder="0,00"
             />
+            {unitPrice <= 0 && (
+              <Text className="text-xs text-red-600 mt-1">
+                Preço deve ser maior que zero
+              </Text>
+            )}
           </div>
 
           {/* Moeda */}
@@ -395,7 +485,7 @@ export function FreightForm({
         {fields.length === 0 ? (
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
             <Text className="text-gray-500 text-sm">
-              Nenhum imposto adicionado. Clique em “Adicionar Imposto”.
+              Nenhum imposto adicionado. Clique em "Adicionar Imposto".
             </Text>
           </div>
         ) : (
@@ -411,10 +501,15 @@ export function FreightForm({
                     placeholder="Nome do imposto (ICMS, PIS...)"
                     maxLength={40}
                     {...register(`freightTaxes.${index}.name`, {
-                      required: "Nome é obrigatório",
+                      required: "Nome do imposto é obrigatório",
+                      validate: {
+                        notEmpty: (value) =>
+                          validateNotEmpty(value) || 
+                          "Nome do imposto não pode conter apenas espaços",
+                      },
                       maxLength: {
                         value: 40,
-                        message: "Máximo de 40 caracteres",
+                        message: "Nome deve ter no máximo 40 caracteres",
                       },
                     })}
                     error={errors.freightTaxes?.[index]?.name?.message}
@@ -422,21 +517,28 @@ export function FreightForm({
                 </div>
 
                 {/* Taxa */}
-                <div className="w-32">
+                <div className="w-32 flex justify-center gap-2">
                   <Input
                     type="number"
                     step="0.01"
-                    min="0"
+                    min="0.01"
                     max="100"
                     placeholder="Taxa %"
                     {...register(`freightTaxes.${index}.rate`, {
                       required: "Taxa é obrigatória",
-                      min: { value: 0, message: "Mínimo: 0%" },
-                      max: { value: 100, message: "Máximo: 100%" },
+                      min: { 
+                        value: 0.01, 
+                        message: "Taxa deve ser maior que 0%" 
+                      },
+                      max: { 
+                        value: 100, 
+                        message: "Taxa deve ser no máximo 100%" 
+                      },
                       valueAsNumber: true,
                     })}
                     error={errors.freightTaxes?.[index]?.rate?.message}
                   />
+                  <p className="self-center font-bold text-lg">%</p>
                 </div>
 
                 {/* Remover */}
@@ -446,6 +548,7 @@ export function FreightForm({
                   leftIcon={FiTrash2}
                   onClick={() => remove(index)}
                   className="cursor-pointer text-red-600 hover:bg-red-50"
+                  aria-label={`Remover imposto ${index + 1}`}
                 />
               </div>
             ))}
@@ -482,6 +585,15 @@ export function FreightForm({
           </div>
         </div>
       </div>
+
+      {/* Validação de preço */}
+      {unitPrice <= 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+          <Text className="text-red-700 text-sm font-medium">
+            ⚠️ O preço unitário deve ser maior que zero para submeter o formulário
+          </Text>
+        </div>
+      )}
 
       {/* Nota */}
       <p className="text-xs text-gray-500 pb-4">

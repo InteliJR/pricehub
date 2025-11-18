@@ -1,3 +1,5 @@
+// src/freights/freights.service.ts
+
 import {
   Injectable,
   NotFoundException,
@@ -9,14 +11,14 @@ import { CreateFreightDto } from './dto/create-freight.dto';
 import { UpdateFreightDto } from './dto/update-freight.dto';
 import { QueryFreightDto } from './dto/query-freight.dto';
 import { ExportFreightDto } from './dto/export-freight.dto';
-import { Currency } from '@prisma/client';
+import { Currency, FreightOperationType } from '@prisma/client';
 
 @Injectable()
 export class FreightsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Cria um novo registro de frete com impostos opcionais
+   * Cria um novo frete com impostos opcionais
    */
   async create(createFreightDto: CreateFreightDto) {
     try {
@@ -24,11 +26,14 @@ export class FreightsService {
         data: {
           name: createFreightDto.name,
           description: createFreightDto.description,
-          paymentTerm: createFreightDto.paymentTerm,
           unitPrice: createFreightDto.unitPrice,
-          currency: createFreightDto.currency || Currency.BRL,
-          additionalCosts: createFreightDto.additionalCosts || 0,
-          // Cria os impostos junto (nested create)
+          currency: createFreightDto.currency,
+          originUf: createFreightDto.originUf.toUpperCase(),
+          originCity: createFreightDto.originCity,
+          destinationUf: createFreightDto.destinationUf.toUpperCase(),
+          destinationCity: createFreightDto.destinationCity,
+          cargoType: createFreightDto.cargoType,
+          operationType: createFreightDto.operationType,
           freightTaxes: createFreightDto.freightTaxes?.length
             ? {
                 create: createFreightDto.freightTaxes.map((tax) => ({
@@ -39,7 +44,15 @@ export class FreightsService {
             : undefined,
         },
         include: {
-          freightTaxes: true,
+          freightTaxes: {
+            select: {
+              id: true,
+              name: true,
+              rate: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
         },
       });
 
@@ -56,16 +69,15 @@ export class FreightsService {
   }
 
   /**
-   * Retorna todos os fretes com paginação, filtros e ordenação
+   * Lista fretes com paginação, filtros e ordenação
    */
   async findAll(query: QueryFreightDto) {
     try {
-      // Valores padrão
       const page = query.page || 1;
       const limit = query.limit || 10;
       const sortBy = query.sortBy || 'createdAt';
       const sortOrder = query.sortOrder || 'desc';
-      const { search, currency } = query;
+      const { search, currency, operationType, originUf, destinationUf } = query;
 
       // Configurar filtros
       const where: any = {};
@@ -74,6 +86,9 @@ export class FreightsService {
         where.OR = [
           { name: { contains: search, mode: 'insensitive' } },
           { description: { contains: search, mode: 'insensitive' } },
+          { originCity: { contains: search, mode: 'insensitive' } },
+          { destinationCity: { contains: search, mode: 'insensitive' } },
+          { cargoType: { contains: search, mode: 'insensitive' } },
         ];
       }
 
@@ -81,7 +96,24 @@ export class FreightsService {
         where.currency = currency;
       }
 
-      // Calcular skip para paginação
+      if (operationType) {
+        where.operationType = operationType;
+      }
+
+      if (originUf) {
+        where.originUf = {
+          contains: originUf.toUpperCase(),
+          mode: 'insensitive',
+        };
+      }
+
+      if (destinationUf) {
+        where.destinationUf = {
+          contains: destinationUf.toUpperCase(),
+          mode: 'insensitive',
+        };
+      }
+
       const skip = (page - 1) * limit;
 
       // Buscar dados e total em paralelo
@@ -111,7 +143,6 @@ export class FreightsService {
         this.prisma.freight.count({ where }),
       ]);
 
-      // Calcular total de páginas
       const totalPages = Math.ceil(total / limit);
 
       return {
@@ -137,12 +168,25 @@ export class FreightsService {
       const freight = await this.prisma.freight.findUnique({
         where: { id },
         include: {
-          freightTaxes: true,
+          freightTaxes: {
+            select: {
+              id: true,
+              name: true,
+              rate: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
           rawMaterials: {
             select: {
               id: true,
               code: true,
               name: true,
+            },
+          },
+          _count: {
+            select: {
+              rawMaterials: true,
             },
           },
         },
@@ -163,28 +207,33 @@ export class FreightsService {
   }
 
   /**
-   * Atualiza um frete existente (com suporte a criar/atualizar impostos)
+   * Atualiza um frete existente
    */
   async update(id: string, updateFreightDto: UpdateFreightDto) {
     try {
       // Verifica se existe
       await this.findOne(id);
 
-      // Extrai freightTaxes para tratar separadamente
       const { freightTaxes, ...freightData } = updateFreightDto;
 
-      // Inicia transação para garantir consistência
+      // Normaliza UFs para maiúsculas se fornecidos
+      if (freightData.originUf) {
+        freightData.originUf = freightData.originUf.toUpperCase();
+      }
+      if (freightData.destinationUf) {
+        freightData.destinationUf = freightData.destinationUf.toUpperCase();
+      }
+
+      // Transação para garantir consistência
       const updatedFreight = await this.prisma.$transaction(async (prisma) => {
-        // 1. Atualiza os dados do frete (SEM freightTaxes)
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const freight = await prisma.freight.update({
+        // 1. Atualiza dados do frete
+        await prisma.freight.update({
           where: { id },
           data: freightData,
         });
 
         // 2. Gerencia impostos (se fornecidos)
         if (freightTaxes && freightTaxes.length > 0) {
-          // Separa impostos para atualizar e criar
           const toUpdate = freightTaxes.filter((tax) => tax.id);
           const toCreate = freightTaxes.filter((tax) => !tax.id);
 
@@ -211,11 +260,19 @@ export class FreightsService {
           }
         }
 
-        // 3. Retorna o frete atualizado com impostos
+        // 3. Retorna o frete atualizado
         return prisma.freight.findUnique({
           where: { id },
           include: {
-            freightTaxes: true,
+            freightTaxes: {
+              select: {
+                id: true,
+                name: true,
+                rate: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
           },
         });
       });
@@ -241,7 +298,7 @@ export class FreightsService {
   }
 
   /**
-   * Remove um frete (verifica se não está em uso)
+   * Remove um frete (verifica dependências)
    */
   async remove(id: string) {
     try {
@@ -258,7 +315,7 @@ export class FreightsService {
         );
       }
 
-      // Delete cascade vai remover freightTaxes automaticamente
+      // Delete cascade remove freightTaxes automaticamente
       await this.prisma.freight.delete({
         where: { id },
       });
@@ -279,8 +336,126 @@ export class FreightsService {
     }
   }
 
+  /**
+   * Exporta fretes em formato CSV
+   */
+  async exportToCSV(exportDto: ExportFreightDto): Promise<string> {
+    try {
+      const { limit, sortBy, sortOrder, filters } = exportDto;
+
+      // Configurar filtros
+      const where: any = {};
+
+      if (filters?.search) {
+        where.OR = [
+          { name: { contains: filters.search, mode: 'insensitive' } },
+          { description: { contains: filters.search, mode: 'insensitive' } },
+          { originCity: { contains: filters.search, mode: 'insensitive' } },
+          { destinationCity: { contains: filters.search, mode: 'insensitive' } },
+          { cargoType: { contains: filters.search, mode: 'insensitive' } },
+        ];
+      }
+
+      if (filters?.currency) {
+        where.currency = filters.currency;
+      }
+
+      if (filters?.operationType) {
+        where.operationType = filters.operationType;
+      }
+
+      if (filters?.originUf) {
+        where.originUf = {
+          contains: filters.originUf.toUpperCase(),
+          mode: 'insensitive',
+        };
+      }
+
+      if (filters?.destinationUf) {
+        where.destinationUf = {
+          contains: filters.destinationUf.toUpperCase(),
+          mode: 'insensitive',
+        };
+      }
+
+      // Buscar dados
+      const freights = await this.prisma.freight.findMany({
+        where,
+        include: {
+          freightTaxes: {
+            select: {
+              name: true,
+              rate: true,
+            },
+          },
+        },
+        orderBy: {
+          [sortBy || 'name']: sortOrder || 'asc',
+        },
+        take: limit || 1000,
+      });
+
+      // Montar CSV
+      const headers = [
+        'ID',
+        'Nome',
+        'Descrição',
+        'Preço Unitário',
+        'Moeda',
+        'UF Origem',
+        'Cidade Origem',
+        'UF Destino',
+        'Cidade Destino',
+        'Tipo de Carga',
+        'Tipo de Operação',
+        'Impostos',
+      ];
+
+      const csvLines = [headers.join(',')];
+
+      // Função para escapar campos CSV
+      const escapeCsvField = (field: any): string => {
+        if (field === null || field === undefined) return '';
+        const str = String(field);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      };
+
+      // Adicionar linhas de dados
+      for (const freight of freights) {
+        const taxesStr = freight.freightTaxes
+          .map((tax) => `${tax.name} (${tax.rate}%)`)
+          .join('; ');
+
+        const row = [
+          escapeCsvField(freight.id),
+          escapeCsvField(freight.name),
+          escapeCsvField(freight.description || ''),
+          escapeCsvField(freight.unitPrice.toFixed(2)),
+          escapeCsvField(freight.currency),
+          escapeCsvField(freight.originUf),
+          escapeCsvField(freight.originCity),
+          escapeCsvField(freight.destinationUf),
+          escapeCsvField(freight.destinationCity),
+          escapeCsvField(freight.cargoType),
+          escapeCsvField(freight.operationType),
+          escapeCsvField(taxesStr),
+        ];
+
+        csvLines.push(row.join(','));
+      }
+
+      return csvLines.join('\n');
+    } catch (error: any) {
+      const message = error?.message || 'Erro desconhecido';
+      throw new BadRequestException(`Erro ao exportar fretes: ${message}`);
+    }
+  }
+
   // ============================================
-  // MÉTODOS EXTRAS ÚTEIS
+  // MÉTODOS AUXILIARES
   // ============================================
 
   /**
@@ -299,15 +474,34 @@ export class FreightsService {
   }
 
   /**
-   * Busca fretes com prazo de pagamento específico
+   * Busca fretes por tipo de operação
    */
-  async findByPaymentTerm(days: number) {
+  async findByOperationType(operationType: FreightOperationType) {
+    return this.prisma.freight.findMany({
+      where: { operationType },
+      include: {
+        freightTaxes: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+  }
+
+  /**
+   * Busca fretes por rota (UF origem e destino)
+   */
+  async findByRoute(originUf: string, destinationUf: string) {
     return this.prisma.freight.findMany({
       where: {
-        paymentTerm: days,
+        originUf: originUf.toUpperCase(),
+        destinationUf: destinationUf.toUpperCase(),
       },
       include: {
         freightTaxes: true,
+      },
+      orderBy: {
+        unitPrice: 'asc',
       },
     });
   }
@@ -353,16 +547,25 @@ export class FreightsService {
    * Retorna estatísticas dos fretes
    */
   async getStatistics() {
-    const [total, byCurrency, avgPrice] = await Promise.all([
+    const [total, byCurrency, byOperationType, avgPrice] = await Promise.all([
       this.prisma.freight.count(),
       this.prisma.freight.groupBy({
         by: ['currency'],
         _count: true,
       }),
+      this.prisma.freight.groupBy({
+        by: ['operationType'],
+        _count: true,
+      }),
       this.prisma.freight.aggregate({
         _avg: {
           unitPrice: true,
-          additionalCosts: true,
+        },
+        _min: {
+          unitPrice: true,
+        },
+        _max: {
+          unitPrice: true,
         },
       }),
     ]);
@@ -370,101 +573,51 @@ export class FreightsService {
     return {
       total,
       byCurrency,
-      averagePrices: {
-        unitPrice: avgPrice._avg.unitPrice,
-        additionalCosts: avgPrice._avg.additionalCosts,
+      byOperationType,
+      prices: {
+        average: avgPrice._avg.unitPrice,
+        min: avgPrice._min.unitPrice,
+        max: avgPrice._max.unitPrice,
       },
     };
   }
 
   /**
-   * Exporta fretes em formato CSV
+   * Deleta um imposto específico de um frete
    */
-  async exportToCSV(exportDto: ExportFreightDto): Promise<string> {
+  async deleteFreightTax(freightId: string, taxId: string) {
     try {
-      const { limit, sortBy, sortOrder, filters } = exportDto;
+      // Verifica se o frete existe
+      await this.findOne(freightId);
 
-      // Configurar filtros
-      const where: any = {};
-
-      if (filters?.search) {
-        where.OR = [
-          { name: { contains: filters.search, mode: 'insensitive' } },
-          { description: { contains: filters.search, mode: 'insensitive' } },
-        ];
-      }
-
-      if (filters?.currency) {
-        where.currency = filters.currency;
-      }
-
-      // Buscar dados com limite
-      const freights = await this.prisma.freight.findMany({
-        where,
-        include: {
-          freightTaxes: {
-            select: {
-              name: true,
-              rate: true,
-            },
-          },
+      // Verifica se o imposto pertence ao frete
+      const tax = await this.prisma.freightTax.findFirst({
+        where: {
+          id: taxId,
+          freightId: freightId,
         },
-        orderBy: {
-          [sortBy || 'name']: sortOrder || 'asc',
-        },
-        take: limit || 1000,
       });
 
-      // Montar o CSV
-      const headers = [
-        'ID',
-        'Nome',
-        'Descrição',
-        'Prazo (dias)',
-        'Preço Unitário',
-        'Moeda',
-        'Custos Adicionais',
-        'Impostos',
-      ];
-
-      // Linha de cabeçalho
-      const csvLines = [headers.join(',')];
-
-      // Linhas de dados
-      for (const freight of freights) {
-        // Formatar impostos como string: "ICMS (12%), PIS (1.65%)"
-        const taxesStr = freight.freightTaxes
-          .map((tax) => `${tax.name} (${tax.rate}%)`)
-          .join(', ');
-
-        // Escapar campos que possam conter vírgulas ou aspas
-        const escapeCsvField = (field: any): string => {
-          if (field === null || field === undefined) return '';
-          const str = String(field);
-          if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-            return `"${str.replace(/"/g, '""')}"`;
-          }
-          return str;
-        };
-
-        const row = [
-          escapeCsvField(freight.id),
-          escapeCsvField(freight.name),
-          escapeCsvField(freight.description || ''),
-          escapeCsvField(freight.paymentTerm),
-          escapeCsvField(freight.unitPrice.toFixed(2)),
-          escapeCsvField(freight.currency),
-          escapeCsvField(freight.additionalCosts.toFixed(2)),
-          escapeCsvField(taxesStr),
-        ];
-
-        csvLines.push(row.join(','));
+      if (!tax) {
+        throw new NotFoundException(
+          'Imposto não encontrado ou não pertence a este frete',
+        );
       }
 
-      return csvLines.join('\n');
+      await this.prisma.freightTax.delete({
+        where: { id: taxId },
+      });
+
+      return {
+        message: 'Imposto removido com sucesso',
+        taxId,
+      };
     } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       const message = error?.message || 'Erro desconhecido';
-      throw new BadRequestException(`Erro ao exportar fretes: ${message}`);
+      throw new BadRequestException(`Erro ao remover imposto: ${message}`);
     }
   }
 }
