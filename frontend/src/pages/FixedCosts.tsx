@@ -5,7 +5,6 @@ import { toast } from "react-hot-toast";
 import type { FixedCost, OverheadGroup } from "@/types";
 import { PageHeader } from "@/components/features/fixedCosts/PageHeader";
 import { FixedCostsSummaryTable } from "@/components/features/fixedCosts/FixedCostsSummaryTable";
-import { OverheadGroupsTable } from "@/components/features/fixedCosts/OverheadGroupsTable";
 import { FixedCostModal } from "@/components/features/fixedCosts/FixedCostModal";
 import { ExportModal } from "@/components/features/fixedCosts/ExportModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
@@ -18,30 +17,6 @@ import {
 } from "@/api/fixedCosts";
 import { useDebounce } from "@/hooks/useDebounce";
 import { triggerCsvDownload } from "@/lib/utils";
-
-const mockOverheadGroups: OverheadGroup[] = [
-  {
-    id: "g1",
-    groupName: "Grupo 01",
-    unit: "Quilograma",
-    salesVolume: 165000,
-    overheadValue: 0.365,
-  },
-  {
-    id: "g2",
-    groupName: "Grupo 02",
-    unit: "Quilograma",
-    salesVolume: 145000,
-    overheadValue: 0.365,
-  },
-  {
-    id: "g3",
-    groupName: "Grupo 03",
-    unit: "Quilograma",
-    salesVolume: 130000,
-    overheadValue: 0.365,
-  },
-];
 
 const EXPORT_COLUMNS = [
   { key: "code", label: "Código" },
@@ -255,15 +230,6 @@ export default function FixedCosts() {
           )}
         </>
       ) : null}
-
-      <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-        <p className="text-sm text-yellow-800">
-          ⚠️ <strong>Grupos de Overhead:</strong> Esta funcionalidade ainda
-          precisa ser implementada. Os dados abaixo são apenas exemplos
-          mockados.
-        </p>
-      </div>
-      <OverheadGroupsTable groups={mockOverheadGroups} />
 
       {/* Modais */}
       <FixedCostModal

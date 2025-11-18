@@ -1,23 +1,32 @@
-import { Currency } from '@prisma/client';
+// src/freights/entities/freight.entity.ts
+
+import { Currency, FreightOperationType } from '@prisma/client';
 
 /**
  * Entity que representa um Frete no sistema.
- * Corresponde ao modelo Freight do Prisma schema.
+ * Corresponde ao modelo Freight do Prisma schema atualizado.
  */
 export class Freight {
   id: string;
   name: string;
   description?: string | null;
-  paymentTerm: number;
   unitPrice: number;
   currency: Currency;
-  additionalCosts: number;
+  originUf: string;
+  originCity: string;
+  destinationUf: string;
+  destinationCity: string;
+  cargoType: string;
+  operationType: FreightOperationType;
   createdAt: Date;
   updatedAt: Date;
 
   // Relações (opcionais, aparecem quando usamos include no Prisma)
-  // freightTaxes?: FreightTax[];
-  // rawMaterials?: RawMaterial[];
+  freightTaxes?: FreightTax[];
+  rawMaterials?: RawMaterial[];
+  _count?: {
+    rawMaterials: number;
+  };
 }
 
 /**
@@ -33,5 +42,14 @@ export class FreightTax {
   updatedAt: Date;
 
   // Relação
-  // freight?: Freight;
+  freight?: Freight;
+}
+
+/**
+ * Interface simplificada de RawMaterial para relações
+ */
+interface RawMaterial {
+  id: string;
+  code: string;
+  name: string;
 }

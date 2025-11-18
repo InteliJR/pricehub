@@ -1,23 +1,17 @@
 // =============================================
-// src/freights/dto/update-freight-tax.dto.ts
+// src/freights/dto/create-freight-tax.dto.ts
 // =============================================
 
 import {
   IsString,
   IsNotEmpty,
   IsNumber,
-  IsOptional,
-  IsUUID,
   Min,
   MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export class UpdateFreightTaxDto {
-  @IsUUID('4', { message: 'O ID deve ser um UUID válido' })
-  @IsOptional()
-  id?: string;
-
+export class CreateFreightTaxDto {
   @IsString()
   @IsNotEmpty({ message: 'O nome do imposto é obrigatório' })
   @MaxLength(100, {
@@ -33,4 +27,3 @@ export class UpdateFreightTaxDto {
   @Type(() => Number)
   rate: number;
 }
-

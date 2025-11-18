@@ -1,3 +1,7 @@
+// =============================================
+// src/freights/dto/export-freight.dto.ts
+// =============================================
+
 import {
   IsString,
   IsOptional,
@@ -9,11 +13,8 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { Currency } from '@prisma/client';
+import { Currency, FreightOperationType } from '@prisma/client';
 
-/**
- * Sub-DTO para os filtros de exportação
- */
 export class ExportFiltersDto {
   @IsOptional()
   @IsString()
@@ -22,11 +23,22 @@ export class ExportFiltersDto {
   @IsOptional()
   @IsEnum(Currency, { message: 'Moeda inválida. Use BRL, USD ou EUR' })
   currency?: Currency;
+
+  @IsOptional()
+  @IsEnum(FreightOperationType, {
+    message: 'Tipo de operação inválido. Use INTERNAL ou EXTERNAL',
+  })
+  operationType?: FreightOperationType;
+
+  @IsOptional()
+  @IsString()
+  originUf?: string;
+
+  @IsOptional()
+  @IsString()
+  destinationUf?: string;
 }
 
-/**
- * DTO para exportação de fretes
- */
 export class ExportFreightDto {
   @IsString()
   @IsIn(['csv'], { message: 'Formato inválido. Use csv' })
@@ -40,7 +52,18 @@ export class ExportFreightDto {
   limit?: number = 1000;
 
   @IsOptional()
-  @IsIn(['name', 'unitPrice', 'paymentTerm', 'createdAt', 'updatedAt'], {
+  @IsIn([
+    'name',
+    'unitPrice',
+    'originUf',
+    'originCity',          
+    'destinationUf',
+    'destinationCity',     
+    'cargoType',
+    'operationType',
+    'createdAt',
+    'updatedAt',
+  ], {
     message: 'Campo de ordenação inválido',
   })
   sortBy?: string = 'name';

@@ -38,7 +38,12 @@ export class FixedCostsController {
   }
 
   @Get()
-  @Throttle(50, 60000)
+  @Throttle({
+    default: {
+      limit: 50,
+      ttl: 60,
+    },
+  })
   findAll(@Query() query: QueryFixedCostDto) {
     return this.fixedCostsService.findAll(query);
   }

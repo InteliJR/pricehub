@@ -1,3 +1,7 @@
+// =============================================
+// src/freights/dto/query-freight.dto.ts
+// =============================================
+
 import {
   IsOptional,
   IsInt,
@@ -8,7 +12,7 @@ import {
   IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { Currency } from '@prisma/client';
+import { Currency, FreightOperationType } from '@prisma/client';
 
 export class QueryFreightDto {
   @IsOptional()
@@ -26,14 +30,39 @@ export class QueryFreightDto {
 
   @IsOptional()
   @IsString()
-  search?: string; // Busca em name e description
+  search?: string;
 
   @IsOptional()
   @IsEnum(Currency, { message: 'Moeda inválida. Use BRL, USD ou EUR' })
   currency?: Currency;
 
   @IsOptional()
-  @IsIn(['name', 'unitPrice', 'paymentTerm', 'createdAt', 'updatedAt'], {
+  @IsEnum(FreightOperationType, {
+    message: 'Tipo de operação inválido. Use INTERNAL ou EXTERNAL',
+  })
+  operationType?: FreightOperationType;
+
+  @IsOptional()
+  @IsString()
+  originUf?: string;
+
+  @IsOptional()
+  @IsString()
+  destinationUf?: string;
+
+  @IsOptional()
+  @IsIn([
+    'name',
+    'unitPrice',
+    'originUf',
+    'originCity',          
+    'destinationUf',
+    'destinationCity',     
+    'cargoType',
+    'operationType',
+    'createdAt',
+    'updatedAt',
+  ], {
     message: 'Campo de ordenação inválido',
   })
   sortBy?: string = 'createdAt';

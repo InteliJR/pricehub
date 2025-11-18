@@ -1,3 +1,188 @@
+### `src/freights/freights.controller.ts`
+
+```typescript
+// src/freights/freights.controller.ts
+
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  Query,
+  Res,
+  HttpStatus,
+} from '@nestjs/common';
+import type { Response } from 'express';
+import { FreightsService } from './freights.service';
+import { CreateFreightDto } from './dto/create-freight.dto';
+import { UpdateFreightDto } from './dto/update-freight.dto';
+import { QueryFreightDto } from './dto/query-freight.dto';
+import { ExportFreightDto } from './dto/export-freight.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
+import { Throttle } from '@nestjs/throttler';
+@Controller('freights')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class FreightsController {
+  constructor(private readonly freightsService: FreightsService) {}
+
+  /**
+   * POST /freights
+   * Cria um novo frete com impostos opcionais
+   * Acesso: ADMIN, LOGISTICA
+   */
+  @Post()
+  @Roles(UserRole.ADMIN, UserRole.LOGISTICA)
+  create(@Body() createFreightDto: CreateFreightDto) {
+    return this.freightsService.create(createFreightDto);
+  }
+
+  /**
+   * POST /freights/export
+   * Exporta fretes em formato CSV
+   * Acesso: ADMIN, LOGISTICA
+   */
+  @Post('export')
+  @Roles(UserRole.ADMIN, UserRole.LOGISTICA)
+  async export(
+    @Body() exportDto: ExportFreightDto,
+    @Res() res: Response,
+  ) {
+    const csvData = await this.freightsService.exportToCSV(exportDto);
+
+    // Gera nome do arquivo com timestamp
+    const timestamp = new Date().toISOString().split('T')[0];
+    const filename = `fretes_${timestamp}.csv`;
+
+    // Configura headers para download
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+
+    // Adiciona BOM UTF-8 para compatibilidade com Excel
+    const BOM = '\uFEFF';
+    res.status(HttpStatus.OK).send(BOM + csvData);
+  }
+
+  /**
+   * GET /freights
+   * Lista todos os fretes com paginação e filtros
+   * Acesso: ADMIN, LOGISTICA
+   * 
+   * Query params:
+   * - page: número da página (padrão: 1)
+   * - limit: itens por página (padrão: 10, máx: 100)
+   * - search: busca em name, description, originCity, destinationCity, cargoType
+   * - currency: filtra por moeda (BRL, USD, EUR)
+   * - operationType: filtra por tipo (INTERNAL, EXTERNAL)
+   * - originUf: filtra por UF de origem
+   * - destinationUf: filtra por UF de destino
+   * - sortBy: campo de ordenação
+   * - sortOrder: asc ou desc
+   */
+  @Get()
+  @Throttle({
+    default: {
+      limit: 50,
+      ttl: 60,
+    },
+  })
+  @Roles(UserRole.ADMIN, UserRole.LOGISTICA)
+  findAll(@Query() query: QueryFreightDto) {
+    return this.freightsService.findAll(query);
+  }
+
+  /**
+   * GET /freights/statistics
+   * Retorna estatísticas dos fretes
+   * Acesso: ADMIN, LOGISTICA
+   */
+  @Get('statistics')
+  @Roles(UserRole.ADMIN, UserRole.LOGISTICA)
+  getStatistics() {
+    return this.freightsService.getStatistics();
+  }
+
+  /**
+   * GET /freights/:id
+   * Busca um frete específico por ID
+   * Acesso: ADMIN, LOGISTICA
+   */
+  @Get(':id')
+  @Roles(UserRole.ADMIN, UserRole.LOGISTICA)
+  findOne(@Param('id') id: string) {
+    return this.freightsService.findOne(id);
+  }
+
+  /**
+   * PATCH /freights/:id
+   * Atualiza um frete existente
+   * Acesso: ADMIN, LOGISTICA
+   */
+  @Patch(':id')
+  @Roles(UserRole.ADMIN, UserRole.LOGISTICA)
+  update(@Param('id') id: string, @Body() updateFreightDto: UpdateFreightDto) {
+    return this.freightsService.update(id, updateFreightDto);
+  }
+
+  /**
+   * DELETE /freights/:id
+   * Remove um frete (verifica dependências)
+   * Acesso: ADMIN
+   */
+  @Delete(':id')
+  @Roles(UserRole.ADMIN)
+  remove(@Param('id') id: string) {
+    return this.freightsService.remove(id);
+  }
+
+  /**
+   * DELETE /freights/:freightId/taxes/:taxId
+   * Remove um imposto específico de um frete
+   * Acesso: ADMIN, LOGISTICA
+   */
+  @Delete(':freightId/taxes/:taxId')
+  @Roles(UserRole.ADMIN, UserRole.LOGISTICA)
+  deleteFreightTax(
+    @Param('freightId') freightId: string,
+    @Param('taxId') taxId: string,
+  ) {
+    return this.freightsService.deleteFreightTax(freightId, taxId);
+  }
+}
+```
+
+---
+
+### `src/freights/freights.module.ts`
+
+```typescript
+import { Module } from '@nestjs/common';
+import { FreightsService } from './freights.service';
+import { FreightsController } from './freights.controller';
+import { PrismaModule } from '../prisma/prisma.module';
+
+@Module({
+  imports: [PrismaModule],
+  controllers: [FreightsController],
+  providers: [FreightsService],
+  exports: [FreightsService], // Exporta para outros módulos usarem se necessário
+})
+export class FreightsModule {}
+```
+
+---
+
+### `src/freights/freights.service.ts`
+
+```typescript
 // src/freights/freights.service.ts
 
 import {
@@ -621,3 +806,432 @@ export class FreightsService {
     }
   }
 }
+```
+
+---
+
+### `src/freights/dto/create-freight-tax.dto.ts`
+
+```typescript
+// =============================================
+// src/freights/dto/create-freight-tax.dto.ts
+// =============================================
+
+import {
+  IsString,
+  IsNotEmpty,
+  IsNumber,
+  Min,
+  MaxLength,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class CreateFreightTaxDto {
+  @IsString()
+  @IsNotEmpty({ message: 'O nome do imposto é obrigatório' })
+  @MaxLength(100, {
+    message: 'O nome do imposto deve ter no máximo 100 caracteres',
+  })
+  name: string;
+
+  @IsNumber(
+    { maxDecimalPlaces: 2 },
+    { message: 'A taxa deve ter no máximo 2 casas decimais' },
+  )
+  @Min(0, { message: 'A taxa não pode ser negativa' })
+  @Type(() => Number)
+  rate: number;
+}
+```
+
+---
+
+### `src/freights/dto/create-freight.dto.ts`
+
+```typescript
+// =============================================
+// src/freights/dto/create-freight.dto.ts
+// =============================================
+
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsNumber,
+  IsEnum,
+  IsPositive,
+  MaxLength,
+  IsArray,
+  ValidateNested,
+  ArrayMinSize,
+  Matches,
+} from 'class-validator';
+import { Currency, FreightOperationType } from '@prisma/client';
+import { Type } from 'class-transformer';
+import { CreateFreightTaxDto } from './create-freight-tax.dto';
+
+export class CreateFreightDto {
+  @IsString()
+  @IsNotEmpty({ message: 'O nome do frete é obrigatório' })
+  @MaxLength(255, { message: 'O nome deve ter no máximo 255 caracteres' })
+  name: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(5000, {
+    message: 'A descrição deve ter no máximo 5000 caracteres',
+  })
+  description?: string;
+
+  @IsNumber(
+    { maxDecimalPlaces: 2 },
+    { message: 'O preço unitário deve ter no máximo 2 casas decimais' },
+  )
+  @IsPositive({ message: 'O preço unitário deve ser positivo' })
+  @Type(() => Number)
+  unitPrice: number;
+
+  @IsEnum(Currency, { message: 'Moeda inválida. Use BRL, USD ou EUR' })
+  currency: Currency;
+
+  @IsString()
+  @IsNotEmpty({ message: 'O UF de origem é obrigatório' })
+  @MaxLength(2, { message: 'O UF deve ter 2 caracteres' })
+  @Matches(/^[A-Z]{2}$/, { message: 'O UF deve conter apenas letras maiúsculas' })
+  originUf: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'A cidade de origem é obrigatória' })
+  @MaxLength(100, { message: 'A cidade deve ter no máximo 100 caracteres' })
+  originCity: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'O UF de destino é obrigatório' })
+  @MaxLength(2, { message: 'O UF deve ter 2 caracteres' })
+  @Matches(/^[A-Z]{2}$/, { message: 'O UF deve conter apenas letras maiúsculas' })
+  destinationUf: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'A cidade de destino é obrigatória' })
+  @MaxLength(100, { message: 'A cidade deve ter no máximo 100 caracteres' })
+  destinationCity: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'O tipo de carga é obrigatório' })
+  @MaxLength(100, { message: 'O tipo de carga deve ter no máximo 100 caracteres' })
+  cargoType: string;
+
+  @IsEnum(FreightOperationType, {
+    message: 'Tipo de operação inválido. Use INTERNAL ou EXTERNAL',
+  })
+  operationType: FreightOperationType;
+
+  @IsArray({ message: 'Os impostos devem ser um array' })
+  @ValidateNested({ each: true })
+  @ArrayMinSize(0, { message: 'Deve haver pelo menos 0 impostos' })
+  @Type(() => CreateFreightTaxDto)
+  @IsOptional()
+  freightTaxes?: CreateFreightTaxDto[];
+}
+```
+
+---
+
+### `src/freights/dto/export-freight.dto.ts`
+
+```typescript
+// =============================================
+// src/freights/dto/export-freight.dto.ts
+// =============================================
+
+import {
+  IsString,
+  IsOptional,
+  IsInt,
+  Min,
+  Max,
+  IsEnum,
+  IsIn,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { Currency, FreightOperationType } from '@prisma/client';
+
+export class ExportFiltersDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsEnum(Currency, { message: 'Moeda inválida. Use BRL, USD ou EUR' })
+  currency?: Currency;
+
+  @IsOptional()
+  @IsEnum(FreightOperationType, {
+    message: 'Tipo de operação inválido. Use INTERNAL ou EXTERNAL',
+  })
+  operationType?: FreightOperationType;
+
+  @IsOptional()
+  @IsString()
+  originUf?: string;
+
+  @IsOptional()
+  @IsString()
+  destinationUf?: string;
+}
+
+export class ExportFreightDto {
+  @IsString()
+  @IsIn(['csv'], { message: 'Formato inválido. Use csv' })
+  format: string = 'csv';
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'O limite deve ser um número inteiro' })
+  @Min(1, { message: 'O limite deve ser no mínimo 1' })
+  @Max(10000, { message: 'O limite deve ser no máximo 10000' })
+  limit?: number = 1000;
+
+  @IsOptional()
+  @IsIn([
+    'name',
+    'unitPrice',
+    'originUf',
+    'destinationUf',
+    'cargoType',
+    'operationType',
+    'createdAt',
+    'updatedAt',
+  ], {
+    message: 'Campo de ordenação inválido',
+  })
+  sortBy?: string = 'name';
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'], { message: 'Ordem inválida. Use asc ou desc' })
+  sortOrder?: 'asc' | 'desc' = 'asc';
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ExportFiltersDto)
+  filters?: ExportFiltersDto;
+}
+```
+
+---
+
+### `src/freights/dto/query-freight.dto.ts`
+
+```typescript
+// =============================================
+// src/freights/dto/query-freight.dto.ts
+// =============================================
+
+import {
+  IsOptional,
+  IsInt,
+  Min,
+  Max,
+  IsString,
+  IsEnum,
+  IsIn,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { Currency, FreightOperationType } from '@prisma/client';
+
+export class QueryFreightDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'A página deve ser um número inteiro' })
+  @Min(1, { message: 'A página deve ser no mínimo 1' })
+  page?: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'O limite deve ser um número inteiro' })
+  @Min(1, { message: 'O limite deve ser no mínimo 1' })
+  @Max(100, { message: 'O limite deve ser no máximo 100' })
+  limit?: number = 10;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsEnum(Currency, { message: 'Moeda inválida. Use BRL, USD ou EUR' })
+  currency?: Currency;
+
+  @IsOptional()
+  @IsEnum(FreightOperationType, {
+    message: 'Tipo de operação inválido. Use INTERNAL ou EXTERNAL',
+  })
+  operationType?: FreightOperationType;
+
+  @IsOptional()
+  @IsString()
+  originUf?: string;
+
+  @IsOptional()
+  @IsString()
+  destinationUf?: string;
+
+  @IsOptional()
+  @IsIn([
+    'name',
+    'unitPrice',
+    'originUf',
+    'destinationUf',
+    'cargoType',
+    'operationType',
+    'createdAt',
+    'updatedAt',
+  ], {
+    message: 'Campo de ordenação inválido',
+  })
+  sortBy?: string = 'createdAt';
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'], { message: 'Ordem inválida. Use asc ou desc' })
+  sortOrder?: 'asc' | 'desc' = 'desc';
+}
+```
+
+---
+
+### `src/freights/dto/update-freight-tax.dto.ts`
+
+```typescript
+// =============================================
+// src/freights/dto/update-freight-tax.dto.ts
+// =============================================
+
+import {
+  IsString,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsUUID,
+  Min,
+  MaxLength,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class UpdateFreightTaxDto {
+  @IsUUID('4', { message: 'O ID deve ser um UUID válido' })
+  @IsOptional()
+  id?: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'O nome do imposto é obrigatório' })
+  @MaxLength(100, {
+    message: 'O nome do imposto deve ter no máximo 100 caracteres',
+  })
+  name: string;
+
+  @IsNumber(
+    { maxDecimalPlaces: 2 },
+    { message: 'A taxa deve ter no máximo 2 casas decimais' },
+  )
+  @Min(0, { message: 'A taxa não pode ser negativa' })
+  @Type(() => Number)
+  rate: number;
+}
+```
+
+---
+
+### `src/freights/dto/update-freight.dto.ts`
+
+```typescript
+// =============================================
+// src/freights/dto/update-freight.dto.ts
+// =============================================
+
+import { PartialType, OmitType } from '@nestjs/mapped-types';
+import { CreateFreightDto } from './create-freight.dto';
+import {
+  IsArray,
+  ValidateNested,
+  ArrayMinSize,
+  IsOptional,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { UpdateFreightTaxDto } from './update-freight-tax.dto';
+
+export class UpdateFreightDto extends PartialType(
+  OmitType(CreateFreightDto, ['freightTaxes'] as const),
+) {
+  @IsArray({ message: 'Os impostos devem ser um array' })
+  @ValidateNested({ each: true })
+  @ArrayMinSize(0)
+  @Type(() => UpdateFreightTaxDto)
+  @IsOptional()
+  freightTaxes?: UpdateFreightTaxDto[];
+}
+```
+
+---
+
+### `src/freights/entities/freight.entity.ts`
+
+```typescript
+// src/freights/entities/freight.entity.ts
+
+import { Currency, FreightOperationType } from '@prisma/client';
+
+/**
+ * Entity que representa um Frete no sistema.
+ * Corresponde ao modelo Freight do Prisma schema atualizado.
+ */
+export class Freight {
+  id: string;
+  name: string;
+  description?: string | null;
+  unitPrice: number;
+  currency: Currency;
+  originUf: string;
+  originCity: string;
+  destinationUf: string;
+  destinationCity: string;
+  cargoType: string;
+  operationType: FreightOperationType;
+  createdAt: Date;
+  updatedAt: Date;
+
+  // Relações (opcionais, aparecem quando usamos include no Prisma)
+  freightTaxes?: FreightTax[];
+  rawMaterials?: RawMaterial[];
+  _count?: {
+    rawMaterials: number;
+  };
+}
+
+/**
+ * Entity que representa um Imposto de Frete no sistema.
+ * Corresponde ao modelo FreightTax do Prisma schema.
+ */
+export class FreightTax {
+  id: string;
+  freightId: string;
+  name: string;
+  rate: number;
+  createdAt: Date;
+  updatedAt: Date;
+
+  // Relação
+  freight?: Freight;
+}
+
+/**
+ * Interface simplificada de RawMaterial para relações
+ */
+interface RawMaterial {
+  id: string;
+  code: string;
+  name: string;
+}
+```
+
+---
+

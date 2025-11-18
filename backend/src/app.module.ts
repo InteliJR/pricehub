@@ -19,12 +19,14 @@ import { ProductGroupsModule } from './product-groups/product-groups.module';
 @Module({
   imports: [
     // Rate Limiting
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60000,
-        limit: 10,
-      },
-    ]),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 60,
+          limit: 10,
+        },
+      ],
+    }),
     PrismaModule,
     AuthModule,
     UsersModule,
