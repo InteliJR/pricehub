@@ -1,90 +1,112 @@
 // src/components/features/rawMaterials/RawMaterialModal.tsx
 
-import React from 'react';
-import type { RawMaterial } from '@/types';
-
-// 1. Importa o "esqueleto" genérico
-import { Modal } from '@/components/common/Modal'; 
-// 2. Importa o novo formulário
+import { toast } from 'react-hot-toast';
+import type { RawMaterial } from '@/types/rawMaterial';
+import type { CreateRawMaterialDTO } from '@/api/rawMaterials';
+import { Modal } from '@/components/common/Modal';
 import { RawMaterialForm } from './RawMaterialForm';
-// 3. Importa o botão
-import { SecondaryButton } from '@/components/common/SecondaryButton';
-import { useTaxesQuery } from '@/api/taxes';
-import { useFreightsQuery } from '@/api/freights';
-import { useRawMaterialQuery } from '@/api/rawMaterials';
+import { ChangeLogHistory } from './ChangeLogHistory';
+import { Button } from '@/components/common/Button';
+import { 
+  useCreateRawMaterialMutation, 
+  useUpdateRawMaterialMutation 
+} from '@/api/rawMaterials';
 
 interface RawMaterialModalProps {
   isOpen: boolean;
   onClose: () => void;
-  mode: 'create' | 'edit';
-  material?: RawMaterial;
-  onSubmit: (formData: FormData) => Promise<void> | void;
-  submitting?: boolean;
+  rawMaterial?: RawMaterial | null;
 }
 
-export function RawMaterialModal({
-  isOpen,
-  onClose,
-  mode,
-  material,
-  onSubmit,
-  submitting = false,
+export function RawMaterialModal({ 
+  isOpen, 
+  onClose, 
+  rawMaterial 
 }: RawMaterialModalProps) {
-  const { data: taxesData } = useTaxesQuery({ page: 1, limit: 100 });
-  const { data: freightsData } = useFreightsQuery({ page: 1, limit: 100 });
-  const { data: materialApi, isLoading: isLoadingMaterial } = useRawMaterialQuery(
-    mode === 'edit' ? material?.id ?? null : null,
-  );
-  const taxes = taxesData?.data ?? [];
-  const freights = freightsData?.data ?? [];
   
-  const title = mode === 'create' ? 'Adicionar Matéria-prima' : 'Editar Matéria-prima';
-  const buttonText = mode === 'create' ? 'Adicionar' : 'Salvar alterações';
+  const createMutation = useCreateRawMaterialMutation();
+  const updateMutation = useUpdateRawMaterialMutation();
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    onSubmit(formData);
+  const isEditing = !!rawMaterial;
+  const title = isEditing ? 'Editar Matéria-Prima' : 'Adicionar Matéria-Prima';
+
+  const handleSubmit = async (data: CreateRawMaterialDTO) => {
+    try {
+      if (isEditing) {
+        await updateMutation.mutateAsync({ 
+          id: rawMaterial.id, 
+          payload: data 
+        });
+        toast.success('Matéria-prima atualizada com sucesso');
+      } else {
+        await createMutation.mutateAsync(data);
+        toast.success('Matéria-prima criada com sucesso');
+      }
+      onClose();
+    } catch (error: any) {
+      const message = error?.response?.data?.message || 'Erro ao salvar matéria-prima';
+      
+      // Tratamento de erros específicos
+      if (error?.response?.status === 409) {
+        toast.error('Já existe uma matéria-prima com este código');
+      } else if (error?.response?.data?.errors) {
+        // Erros de validação
+        const validationErrors = error.response.data.errors;
+        if (Array.isArray(validationErrors)) {
+          validationErrors.forEach((err: any) => {
+            toast.error(err.message || 'Erro de validação');
+          });
+        } else {
+          toast.error(message);
+        }
+      } else {
+        toast.error(message);
+      }
+    }
   };
 
-  const modalFooter = (
-    <SecondaryButton
-      variant="primary"
-      type="submit"
-      form="raw-material-form"
-      disabled={submitting || (mode === 'edit' && isLoadingMaterial)}
-    >
-      {submitting ? 'Salvando...' : buttonText}
-    </SecondaryButton>
-  );
+  const isLoading = createMutation.isPending || updateMutation.isPending;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} footer={modalFooter}>
-      <form id="raw-material-form" onSubmit={handleSubmit} className="space-y-4">
-        {mode === 'edit' && isLoadingMaterial ? (
-          <div className="p-2 text-sm text-gray-600">Carregando dados...</div>
-        ) : (
-          <RawMaterialForm
-            material={material}
-            taxes={taxes}
-            freights={freights}
-            defaults={
-              materialApi
-                ? {
-                    measurementUnit: materialApi.measurementUnit,
-                    inputGroup: materialApi.inputGroup,
-                    paymentTerm: materialApi.paymentTerm,
-                    price: parseFloat(materialApi.acquisitionPrice),
-                    currency: (materialApi.currency as 'BRL' | 'USD' | 'EUR'),
-                    additionalCosts: parseFloat(materialApi.additionalCost),
-                    taxId: materialApi.taxId,
-                    freightId: materialApi.freightId,
-                  }
-                : undefined
-            }
-          />
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={title}
+      size="xl"
+    >
+      <div className="space-y-6">
+        {/* Formulário */}
+        <RawMaterialForm 
+          rawMaterial={rawMaterial} 
+          onSubmit={handleSubmit}
+          isLoading={isLoading}
+        />
+        
+        {/* Histórico de mudanças (apenas em edição) */}
+        {isEditing && (
+          <div className="border-t pt-6">
+            <ChangeLogHistory rawMaterialId={rawMaterial.id} />
+          </div>
         )}
-      </form>
+      </div>
+      
+      <div className="flex justify-end gap-3 mt-6 pt-6 border-t">
+        <Button 
+          variant="secondary" 
+          onClick={onClose}
+          disabled={isLoading}
+        >
+          Cancelar
+        </Button>
+        <Button 
+          type="submit"
+          variant="primary"
+          form="raw-material-form"
+          isLoading={isLoading}
+        >
+          {isEditing ? 'Atualizar' : 'Adicionar'}
+        </Button>
+      </div>
     </Modal>
   );
 }

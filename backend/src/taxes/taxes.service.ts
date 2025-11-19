@@ -1,67 +1,65 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
-import { CreateTaxDto } from './dto/create-tax.dto';
-import { UpdateTaxDto } from './dto/update-tax.dto';
-import { PrismaService } from '../prisma/prisma.service';
-import { Prisma } from '@prisma/client';
+// src/taxes/taxes.service.ts
 
-interface FindAllParams {
-  page?: number;
-  limit?: number;
-  search?: string;
-  sortBy?: string;
-  sortOrder?: 'asc' | 'desc' | string;
-}
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { CreateFreightTaxDto } from './dto/create-freight-tax.dto';
+import { UpdateFreightTaxDto } from './dto/update-freight-tax.dto';
+import { CreateRawMaterialTaxDto } from './dto/create-raw-material-tax.dto';
+import { UpdateRawMaterialTaxDto } from './dto/update-raw-material-tax.dto';
+import { QueryTaxesDto } from './dto/query-taxes.dto';
+import { ExportTaxesDto } from './dto/export-taxes.dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class TaxesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(createTaxDto: CreateTaxDto) {
-    const data: Prisma.TaxCreateInput = {
-      name: createTaxDto.name,
-      description: createTaxDto.description ?? undefined,
-      taxItems: {
-        create: (createTaxDto.items || []).map((it) => ({
-          name: it.name,
-          rate: new Prisma.Decimal(it.rate ?? 0),
-          recoverable: !!it.recoverable,
-        })),
-      },
-    };
+  // ========================================
+  // FREIGHT TAXES
+  // ========================================
 
-    const tax = await this.prisma.tax.create({
-      data,
-      include: { taxItems: true },
-    });
-
-    return tax;
-  }
-
-  async findAll(params: FindAllParams = {}) {
-    const page = params.page && params.page > 0 ? params.page : 1;
-    const limit = params.limit && params.limit > 0 ? params.limit : 10;
+  async findAllFreightTaxes(query: QueryTaxesDto) {
+    const page = query.page || 1;
+    const limit = query.limit || 10;
     const skip = (page - 1) * limit;
+    const sortBy = query.sortBy || 'name';
+    const sortOrder = query.sortOrder || 'asc';
 
-    const where: any = {};
-    if (params.search) {
+    // Construir filtro de busca
+    const where: Prisma.FreightTaxWhereInput = {};
+
+    if (query.search) {
       where.OR = [
-        { name: { contains: params.search, mode: 'insensitive' } },
-        { description: { contains: params.search, mode: 'insensitive' } },
+        { name: { contains: query.search, mode: 'insensitive' } },
+        {
+          freight: {
+            name: { contains: query.search, mode: 'insensitive' },
+          },
+        },
       ];
     }
 
-    const sortBy = params.sortBy || 'name';
-    const sortOrder = params.sortOrder === 'desc' ? 'desc' : 'asc';
-
-    const [total, data] = await this.prisma.$transaction([
-      this.prisma.tax.count({ where }),
-      this.prisma.tax.findMany({
+    // Executar consulta com paginação
+    const [data, total] = await Promise.all([
+      this.prisma.freightTax.findMany({
         where,
-        include: { taxItems: true },
-        orderBy: { [sortBy]: sortOrder as Prisma.SortOrder },
         skip,
         take: limit,
+        orderBy: { [sortBy]: sortOrder },
+        include: {
+          freight: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
       }),
+      this.prisma.freightTax.count({ where }),
     ]);
 
     return {
@@ -70,104 +68,412 @@ export class TaxesService {
         total,
         page,
         limit,
-        totalPages: Math.max(1, Math.ceil(total / limit)),
+        totalPages: Math.ceil(total / limit),
       },
     };
   }
 
-  async findOne(id: string) {
-    const tax = await this.prisma.tax.findUnique({
+  async findOneFreightTax(id: string) {
+    const tax = await this.prisma.freightTax.findUnique({
       where: { id },
-      include: { taxItems: true },
+      include: {
+        freight: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
     });
-    if (!tax) throw new NotFoundException('Imposto não encontrado');
+
+    if (!tax) {
+      throw new NotFoundException('Imposto de frete não encontrado');
+    }
+
     return tax;
   }
 
-  async update(id: string, updateTaxDto: UpdateTaxDto) {
-    const tax = await this.prisma.tax.findUnique({ where: { id }, include: { taxItems: true } });
-    if (!tax) throw new NotFoundException('Imposto não encontrado');
+  async createFreightTax(dto: CreateFreightTaxDto) {
+    // Verificar se o frete existe
+    const freight = await this.prisma.freight.findUnique({
+      where: { id: dto.freightId },
+    });
 
-    // Determine item operations
-    const incoming = updateTaxDto.items ?? [];
-    const existingItems = tax.taxItems ?? [];
-
-    const incomingIds = incoming.filter((i) => !!(i as any).id).map((i) => (i as any).id);
-
-    const toDeleteIds = existingItems.filter((e) => !incomingIds.includes(e.id)).map((e) => e.id);
-
-    // Validate provided IDs belong to this tax
-    for (const item of incoming.filter((i) => !!(i as any).id)) {
-      const found = existingItems.find((e) => e.id === (item as any).id);
-      if (!found) throw new NotFoundException(`Tax item ${ (item as any).id } not found for tax ${id}`);
+    if (!freight) {
+      throw new BadRequestException('Frete não encontrado');
     }
 
-    const ops: Prisma.PrismaPromise<any>[] = [];
+    // Criar o imposto
+    const tax = await this.prisma.freightTax.create({
+      data: {
+        name: dto.name,
+        rate: new Prisma.Decimal(dto.rate),
+        freightId: dto.freightId,
+      },
+      include: {
+        freight: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
 
-    // Update tax fields
-    ops.push(
-      this.prisma.tax.update({ where: { id }, data: { name: updateTaxDto.name ?? undefined, description: updateTaxDto.description ?? undefined } }),
-    );
-
-    // Deletes
-    if (toDeleteIds.length > 0) {
-      ops.push(this.prisma.taxItem.deleteMany({ where: { id: { in: toDeleteIds } } }));
-    }
-
-    // Updates
-    for (const item of incoming.filter((i) => !!(i as any).id)) {
-      const it = item as any;
-      ops.push(
-        this.prisma.taxItem.update({ where: { id: it.id }, data: { name: it.name, rate: new Prisma.Decimal(it.rate ?? 0), recoverable: !!it.recoverable } }),
-      );
-    }
-
-    // Creates
-    for (const item of incoming.filter((i) => !(i as any).id)) {
-      const it = item as any;
-      ops.push(
-        this.prisma.taxItem.create({ data: { taxId: id, name: it.name, rate: new Prisma.Decimal(it.rate ?? 0), recoverable: !!it.recoverable } }),
-      );
-    }
-
-    await this.prisma.$transaction(ops);
-
-    return this.findOne(id);
+    return tax;
   }
 
-  async remove(id: string) {
-    // Check association with raw materials
-    const count = await this.prisma.rawMaterial.count({ where: { taxId: id } });
-    if (count > 0) throw new ConflictException('Imposto está associado a matérias-primas');
+  async updateFreightTax(id: string, dto: UpdateFreightTaxDto) {
+    // Verificar se existe
+    await this.findOneFreightTax(id);
 
-    await this.prisma.tax.delete({ where: { id } });
-    return { message: 'Imposto deletado com sucesso' };
+    // Se está tentando mudar o frete, verificar se existe
+    if (dto.freightId) {
+      const freight = await this.prisma.freight.findUnique({
+        where: { id: dto.freightId },
+      });
+
+      if (!freight) {
+        throw new BadRequestException('Frete não encontrado');
+      }
+    }
+
+    // Atualizar
+    const updateData: Prisma.FreightTaxUpdateInput = {};
+
+    if (dto.name !== undefined) {
+      updateData.name = dto.name;
+    }
+
+    if (dto.rate !== undefined) {
+      updateData.rate = new Prisma.Decimal(dto.rate);
+    }
+
+    if (dto.freightId !== undefined) {
+      updateData.freight = { connect: { id: dto.freightId } };
+    }
+
+    const tax = await this.prisma.freightTax.update({
+      where: { id },
+      data: updateData,
+      include: {
+        freight: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    return tax;
   }
 
-  async export(payload: any) {
-    // Build filters
-    const where: any = {};
-    if (payload?.filters?.search) {
+  async removeFreightTax(id: string) {
+    // Verificar se existe
+    await this.findOneFreightTax(id);
+
+    // Deletar
+    await this.prisma.freightTax.delete({
+      where: { id },
+    });
+
+    return { message: 'Imposto de frete excluído com sucesso' };
+  }
+
+  async exportFreightTaxes(dto: ExportTaxesDto) {
+    const limit = dto.limit || 500;
+    const sortBy = dto.sortBy || 'name';
+    const sortOrder = dto.sortOrder || 'asc';
+
+    // Construir filtro
+    const where: Prisma.FreightTaxWhereInput = {};
+
+    if (dto.filters?.search) {
       where.OR = [
-        { name: { contains: payload.filters.search, mode: 'insensitive' } },
-        { description: { contains: payload.filters.search, mode: 'insensitive' } },
+        { name: { contains: dto.filters.search, mode: 'insensitive' } },
+        {
+          freight: {
+            name: { contains: dto.filters.search, mode: 'insensitive' },
+          },
+        },
       ];
     }
 
-    const sortBy = payload?.sortBy || 'name';
-    const sortOrder = payload?.sortOrder === 'desc' ? 'desc' : 'asc';
-    const limit = payload?.limit ?? 100;
-
-    const rows = await this.prisma.tax.findMany({ where, include: { taxItems: true }, orderBy: { [sortBy]: sortOrder as Prisma.SortOrder }, take: limit });
-
-    // Build CSV
-    const header = 'ID,Nome,Descrição,Itens,Data de Criação';
-    const lines = rows.map((r) => {
-      const items = (r.taxItems || []).map((it) => `${it.name} (${Number(it.rate).toFixed(2)}%)`).join(', ');
-      const desc = r.description ? r.description.replace(/\n/g, ' ').replace(/,/g, ' ') : '';
-      return `${r.id},${r.name},${desc},"${items}",${r.createdAt.toISOString().split('T')[0]}`;
+    // Buscar dados
+    const taxes = await this.prisma.freightTax.findMany({
+      where,
+      take: limit,
+      orderBy: { [sortBy]: sortOrder },
+      include: {
+        freight: {
+          select: {
+            name: true,
+          },
+        },
+      },
     });
 
-    return [header, ...lines].join('\n');
+    // Gerar CSV
+    const header = 'Nome,Taxa (%),Frete,Data de Criação';
+    const rows = taxes.map((tax) => {
+      const name = this.escapeCsv(tax.name);
+      const rate = Number(tax.rate).toFixed(2);
+      const freightName = this.escapeCsv(tax.freight?.name || 'N/A');
+      const createdAt = new Date(tax.createdAt).toLocaleDateString('pt-BR');
+
+      return `${name},${rate},${freightName},${createdAt}`;
+    });
+
+    return [header, ...rows].join('\n');
+  }
+
+  // ========================================
+  // RAW MATERIAL TAXES
+  // ========================================
+
+  async findAllRawMaterialTaxes(query: QueryTaxesDto) {
+    const page = query.page || 1;
+    const limit = query.limit || 10;
+    const skip = (page - 1) * limit;
+    const sortBy = query.sortBy || 'name';
+    const sortOrder = query.sortOrder || 'asc';
+
+    // Construir filtro de busca
+    const where: Prisma.RawMaterialTaxWhereInput = {};
+
+    if (query.search) {
+      where.OR = [
+        { name: { contains: query.search, mode: 'insensitive' } },
+        {
+          rawMaterial: {
+            name: { contains: query.search, mode: 'insensitive' },
+          },
+        },
+        {
+          rawMaterial: {
+            code: { contains: query.search, mode: 'insensitive' },
+          },
+        },
+      ];
+    }
+
+    // Executar consulta com paginação
+    const [data, total] = await Promise.all([
+      this.prisma.rawMaterialTax.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { [sortBy]: sortOrder },
+        include: {
+          rawMaterial: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
+        },
+      }),
+      this.prisma.rawMaterialTax.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async findOneRawMaterialTax(id: string) {
+    const tax = await this.prisma.rawMaterialTax.findUnique({
+      where: { id },
+      include: {
+        rawMaterial: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+          },
+        },
+      },
+    });
+
+    if (!tax) {
+      throw new NotFoundException('Imposto de matéria-prima não encontrado');
+    }
+
+    return tax;
+  }
+
+  async createRawMaterialTax(dto: CreateRawMaterialTaxDto) {
+    // Verificar se a matéria-prima existe
+    const rawMaterial = await this.prisma.rawMaterial.findUnique({
+      where: { id: dto.rawMaterialId },
+    });
+
+    if (!rawMaterial) {
+      throw new BadRequestException('Matéria-prima não encontrada');
+    }
+
+    // Criar o imposto
+    const tax = await this.prisma.rawMaterialTax.create({
+      data: {
+        name: dto.name,
+        rate: new Prisma.Decimal(dto.rate),
+        recoverable: dto.recoverable,
+        rawMaterialId: dto.rawMaterialId,
+      },
+      include: {
+        rawMaterial: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+          },
+        },
+      },
+    });
+
+    return tax;
+  }
+
+  async updateRawMaterialTax(id: string, dto: UpdateRawMaterialTaxDto) {
+    // Verificar se existe
+    await this.findOneRawMaterialTax(id);
+
+    // Se está tentando mudar a matéria-prima, verificar se existe
+    if (dto.rawMaterialId) {
+      const rawMaterial = await this.prisma.rawMaterial.findUnique({
+        where: { id: dto.rawMaterialId },
+      });
+
+      if (!rawMaterial) {
+        throw new BadRequestException('Matéria-prima não encontrada');
+      }
+    }
+
+    // Atualizar
+    const updateData: Prisma.RawMaterialTaxUpdateInput = {};
+
+    if (dto.name !== undefined) {
+      updateData.name = dto.name;
+    }
+
+    if (dto.rate !== undefined) {
+      updateData.rate = new Prisma.Decimal(dto.rate);
+    }
+
+    if (dto.recoverable !== undefined) {
+      updateData.recoverable = dto.recoverable;
+    }
+
+    if (dto.rawMaterialId !== undefined) {
+      updateData.rawMaterial = { connect: { id: dto.rawMaterialId } };
+    }
+
+    const tax = await this.prisma.rawMaterialTax.update({
+      where: { id },
+      data: updateData,
+      include: {
+        rawMaterial: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+          },
+        },
+      },
+    });
+
+    return tax;
+  }
+
+  async removeRawMaterialTax(id: string) {
+    // Verificar se existe
+    await this.findOneRawMaterialTax(id);
+
+    // Deletar
+    await this.prisma.rawMaterialTax.delete({
+      where: { id },
+    });
+
+    return { message: 'Imposto de matéria-prima excluído com sucesso' };
+  }
+
+  async exportRawMaterialTaxes(dto: ExportTaxesDto) {
+    const limit = dto.limit || 500;
+    const sortBy = dto.sortBy || 'name';
+    const sortOrder = dto.sortOrder || 'asc';
+
+    // Construir filtro
+    const where: Prisma.RawMaterialTaxWhereInput = {};
+
+    if (dto.filters?.search) {
+      where.OR = [
+        { name: { contains: dto.filters.search, mode: 'insensitive' } },
+        {
+          rawMaterial: {
+            name: { contains: dto.filters.search, mode: 'insensitive' },
+          },
+        },
+        {
+          rawMaterial: {
+            code: { contains: dto.filters.search, mode: 'insensitive' },
+          },
+        },
+      ];
+    }
+
+    // Buscar dados
+    const taxes = await this.prisma.rawMaterialTax.findMany({
+      where,
+      take: limit,
+      orderBy: { [sortBy]: sortOrder },
+      include: {
+        rawMaterial: {
+          select: {
+            name: true,
+            code: true,
+          },
+        },
+      },
+    });
+
+    // Gerar CSV
+    const header = 'Nome,Taxa (%),Recuperável,Matéria-Prima,Código,Data de Criação';
+    const rows = taxes.map((tax) => {
+      const name = this.escapeCsv(tax.name);
+      const rate = Number(tax.rate).toFixed(2);
+      const recoverable = tax.recoverable ? 'Sim' : 'Não';
+      const rawMaterialName = this.escapeCsv(tax.rawMaterial?.name || 'N/A');
+      const code = this.escapeCsv(tax.rawMaterial?.code || '-');
+      const createdAt = new Date(tax.createdAt).toLocaleDateString('pt-BR');
+
+      return `${name},${rate},${recoverable},${rawMaterialName},${code},${createdAt}`;
+    });
+
+    return [header, ...rows].join('\n');
+  }
+
+  // ========================================
+  // HELPERS
+  // ========================================
+
+  private escapeCsv(value: string): string {
+    if (!value) return '';
+    
+    // Se contém vírgula, aspas ou quebra de linha, envolver em aspas
+    if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+      // Escapar aspas duplicando-as
+      const escaped = value.replace(/"/g, '""');
+      return `"${escaped}"`;
+    }
+    
+    return value;
   }
 }

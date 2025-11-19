@@ -1,75 +1,118 @@
+// src/api/products.ts
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from './client';
 
-// Backend Product shape (simplified from service includes)
+// ========================================
+// Tipagens de Requisição e Resposta
+// ========================================
+
 export interface ProductApi {
   id: string;
-  code: string; // numeric string
-  name: string; // using description in UI
+  code: string;
+  name: string;
   description?: string | null;
   fixedCostId?: string | null;
-  priceWithoutTaxesAndFreight?: string | null; // Decimal as string
-  priceWithTaxesAndFreight?: string | null; // Decimal as string
+  productGroupId?: string | null;
+  priceWithoutTaxesAndFreight?: string | number | null;
+  priceWithTaxesAndFreight?: string | number | null;
+  createdAt: string;
+  updatedAt: string;
+  creator?: {
+    id: string;
+    name: string;
+    email: string;
+  };
   fixedCost?: {
     id: string;
     description: string;
-    overheadPerUnit: string; // Decimal string
+    code?: string;
+    overheadPerUnit: string | number;
   } | null;
-  createdAt: string;
-  updatedAt: string;
+  productGroup?: {
+    id: string;
+    name: string;
+    description?: string;
+  } | null;
+  productRawMaterials?: Array<{
+    rawMaterialId: string;
+    quantity: string | number;
+    rawMaterial?: {
+      id: string;
+      code: string;
+      name: string;
+      measurementUnit: string;
+      acquisitionPrice: number;
+      priceConvertedBrl: number;
+      currency: string;
+    };
+  }>;
 }
 
 export interface ProductsListResponse {
   data: ProductApi[];
-  meta: { total: number; page: number; limit: number; totalPages: number };
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
 }
 
 export interface RawMaterialInputPayload {
   rawMaterialId: string;
-  quantity: number; // numeric quantity
+  quantity: number;
 }
 
 export interface CreateProductPayload {
-  code: string; // numeric string
-  name: string; // product name (UI description field maps here)
+  code: string;
+  name: string;
   description?: string;
   fixedCostId?: string;
-  rawMaterials: RawMaterialInputPayload[]; // minimal for now (empty permissible?)
+  productGroupId?: string;
+  rawMaterials: RawMaterialInputPayload[];
 }
 
 export type UpdateProductPayload = Partial<CreateProductPayload>;
 
-// Map API -> UI Product interface
-// UI Product has: id, code, description, group, price, currency, overhead
-export function mapApiToUi(api: ProductApi) {
-  return {
-    id: api.id,
-    code: `#${api.code}`,
-    description: api.name || api.description || '',
-    group: 1, // no group in backend; placeholder
-    price: parseFloat(api.priceWithTaxesAndFreight || api.priceWithoutTaxesAndFreight || '0'),
-    currency: 'Real' as const, // prices aggregated in BRL
-    overhead: api.fixedCost?.overheadPerUnit ? parseFloat(api.fixedCost.overheadPerUnit) : 0,
+export interface ExportProductsPayload {
+  format: 'csv';
+  limit?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  filters?: {
+    search?: string;
+    productGroupId?: string;
   };
 }
 
-export function fetchProducts(params: {
+export interface FindAllProductsQuery {
   page?: number;
   limit?: number;
   search?: string;
-  includeFixedCost?: boolean;
-  includeCalculations?: boolean;
-}) {
+  productGroupId?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+// ========================================
+// Funções de API
+// ========================================
+
+export function fetchProducts(params: FindAllProductsQuery) {
   return apiClient
     .get<ProductsListResponse>('/products', { params })
     .then((r) => r.data);
 }
 
-export function fetchProduct(id: string, params?: {
-  includeFixedCost?: boolean;
-  includeCalculations?: boolean;
-  includeRawMaterials?: boolean;
-}) {
+export function fetchProduct(
+  id: string,
+  params?: {
+    includeFixedCost?: boolean;
+    includeCalculations?: boolean;
+    includeRawMaterials?: boolean;
+  }
+) {
   return apiClient
     .get<ProductApi>(`/products/${id}`, { params })
     .then((r) => r.data);
@@ -80,50 +123,117 @@ export function createProduct(payload: CreateProductPayload) {
 }
 
 export function updateProduct(id: string, payload: UpdateProductPayload) {
-  return apiClient.patch<ProductApi>(`/products/${id}`, payload).then((r) => r.data);
+  return apiClient
+    .patch<ProductApi>(`/products/${id}`, payload)
+    .then((r) => r.data);
 }
 
 export function deleteProduct(id: string) {
-  return apiClient.delete<{ message: string; id: string }>(`/products/${id}`).then((r) => r.data);
+  return apiClient
+    .delete<{ message: string; id: string }>(`/products/${id}`)
+    .then((r) => r.data);
 }
 
-// Hooks
-export function useProductsQuery(params: { page: number; limit: number; search?: string }) {
+export async function exportProducts(
+  payload: ExportProductsPayload
+): Promise<Blob> {
+  const { data } = await apiClient.post('/products/export', payload, {
+    responseType: 'blob',
+  });
+  return data;
+}
+
+// ========================================
+// Hooks do React Query
+// ========================================
+
+export function useProductsQuery(params: FindAllProductsQuery) {
   return useQuery({
     queryKey: ['products', params],
-    queryFn: () => fetchProducts({ ...params }),
+    queryFn: () => fetchProducts(params),
+    placeholderData: (previousData) => previousData,
   });
 }
 
 export function useProductQuery(id?: string | null) {
   return useQuery({
     queryKey: ['product', id],
-    queryFn: () => fetchProduct(id as string, { includeFixedCost: true }),
+    queryFn: () =>
+      fetchProduct(id as string, {
+        includeFixedCost: true,
+        includeRawMaterials: true,
+      }),
     enabled: !!id,
   });
 }
 
 export function useCreateProductMutation() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createProduct,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['products'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
   });
 }
 
 export function useUpdateProductMutation() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (args: { id: string; payload: UpdateProductPayload }) =>
       updateProduct(args.id, args.payload),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['products'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
   });
 }
 
 export function useDeleteProductMutation() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteProduct(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['products'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
   });
+}
+
+export function useExportProductsMutation() {
+  return useMutation({
+    mutationFn: exportProducts,
+  });
+}
+
+// ========================================
+// Helpers de Conversão (Opcional)
+// ========================================
+
+export function mapApiToUi(api: ProductApi) {
+  const price =
+    typeof api.priceWithTaxesAndFreight === 'number'
+      ? api.priceWithTaxesAndFreight
+      : typeof api.priceWithTaxesAndFreight === 'string'
+      ? parseFloat(api.priceWithTaxesAndFreight)
+      : typeof api.priceWithoutTaxesAndFreight === 'number'
+      ? api.priceWithoutTaxesAndFreight
+      : typeof api.priceWithoutTaxesAndFreight === 'string'
+      ? parseFloat(api.priceWithoutTaxesAndFreight)
+      : 0;
+
+  const overhead =
+    typeof api.fixedCost?.overheadPerUnit === 'number'
+      ? api.fixedCost.overheadPerUnit
+      : typeof api.fixedCost?.overheadPerUnit === 'string'
+      ? parseFloat(api.fixedCost.overheadPerUnit)
+      : 0;
+
+  return {
+    id: api.id,
+    code: `#${api.code}`,
+    description: api.name || api.description || '',
+    group: api.productGroup?.name || '-',
+    price,
+    currency: 'Real' as const,
+    overhead,
+  };
 }
