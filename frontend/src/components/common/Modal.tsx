@@ -19,7 +19,7 @@ export function Modal({
   title, 
   children, 
   footer,
-  size = 'md'
+  size = '2xl'
 }: ModalProps) {
   // Previne scroll do body quando modal está aberto
   useEffect(() => {
@@ -60,7 +60,7 @@ export function Modal({
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Overlay */}
       <div 
-        className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+        className="fixed inset-0 bg-black/20 bg-opacity-50 transition-opacity"
         onClick={onClose}
       />
 

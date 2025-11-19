@@ -20,7 +20,7 @@ export default function Taxes() {
           <button
             onClick={() => setActiveTab("freight")}
             className={`
-              py-4 px-1 border-b-2 font-medium text-sm transition-colors
+              py-4 px-1 cursor-pointer border-b-2 font-medium text-sm transition-colors
               ${
                 activeTab === "freight"
                   ? "border-blue-600 text-blue-600"
@@ -33,7 +33,7 @@ export default function Taxes() {
           <button
             onClick={() => setActiveTab("rawMaterial")}
             className={`
-              py-4 px-1 border-b-2 font-medium text-sm transition-colors
+              py-4 px-1 cursor-pointer border-b-2 font-medium text-sm transition-colors
               ${
                 activeTab === "rawMaterial"
                   ? "border-blue-600 text-blue-600"
