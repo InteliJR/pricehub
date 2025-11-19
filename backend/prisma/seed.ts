@@ -82,7 +82,54 @@ async function main() {
   console.log(`✅ ${users.length} usuários criados/atualizados`);
 
   // ============================================
-  // 2. FRETES (Freights e FreightTaxes)
+  // 2. IMPOSTOS DE FRETE (FreightTaxes)
+  // ============================================
+  console.log('\n💰 Criando impostos de frete...');
+
+  const freightTax1 = await prisma.freightTax.upsert({
+    where: { id: 'ftax-1' },
+    update: {},
+    create: {
+      id: 'ftax-1',
+      name: 'ICMS',
+      rate: 12.0,
+    },
+  });
+
+  const freightTax2 = await prisma.freightTax.upsert({
+    where: { id: 'ftax-2' },
+    update: {},
+    create: {
+      id: 'ftax-2',
+      name: 'PIS',
+      rate: 1.65,
+    },
+  });
+
+  const freightTax3 = await prisma.freightTax.upsert({
+    where: { id: 'ftax-3' },
+    update: {},
+    create: {
+      id: 'ftax-3',
+      name: 'COFINS',
+      rate: 7.6,
+    },
+  });
+
+  const freightTax4 = await prisma.freightTax.upsert({
+    where: { id: 'ftax-4' },
+    update: {},
+    create: {
+      id: 'ftax-4',
+      name: 'II (Imposto de Importação)',
+      rate: 14.0,
+    },
+  });
+
+  console.log('✅ Impostos de frete criados');
+
+  // ============================================
+  // 3. FRETES (Freights)
   // ============================================
   console.log('\n🚚 Criando opções de frete...');
 
@@ -102,10 +149,10 @@ async function main() {
       cargoType: 'Carga Seca',
       operationType: FreightOperationType.INTERNAL,
       freightTaxes: {
-        create: [
-          { name: 'ICMS', rate: 12.0 },
-          { name: 'PIS', rate: 1.65 },
-          { name: 'COFINS', rate: 7.6 },
+        connect: [
+          { id: freightTax1.id },
+          { id: freightTax2.id },
+          { id: freightTax3.id },
         ],
       },
     },
@@ -127,10 +174,10 @@ async function main() {
       cargoType: 'Container 40 pés',
       operationType: FreightOperationType.EXTERNAL,
       freightTaxes: {
-        create: [
-          { name: 'II (Imposto de Importação)', rate: 14.0 },
-          { name: 'PIS', rate: 2.1 },
-          { name: 'COFINS', rate: 9.65 },
+        connect: [
+          { id: freightTax4.id },
+          { id: freightTax2.id },
+          { id: freightTax3.id },
         ],
       },
     },
@@ -152,10 +199,10 @@ async function main() {
       cargoType: 'Carga Fracionada',
       operationType: FreightOperationType.INTERNAL,
       freightTaxes: {
-        create: [
-          { name: 'ICMS', rate: 12.0 },
-          { name: 'PIS', rate: 1.65 },
-          { name: 'COFINS', rate: 7.6 },
+        connect: [
+          { id: freightTax1.id },
+          { id: freightTax2.id },
+          { id: freightTax3.id },
         ],
       },
     },
@@ -164,7 +211,135 @@ async function main() {
   console.log('✅ Fretes criados com sucesso');
 
   // ============================================
-  // 3. MATÉRIAS-PRIMAS (com impostos diretos)
+  // 4. IMPOSTOS DE MATÉRIA-PRIMA (RawMaterialTaxes)
+  // ============================================
+  console.log('\n💰 Criando impostos de matéria-prima...');
+
+  const rmTax1 = await prisma.rawMaterialTax.upsert({
+    where: { id: 'rmtax-1' },
+    update: {},
+    create: {
+      id: 'rmtax-1',
+      name: 'PIS',
+      rate: 1.65,
+      recoverable: true,
+    },
+  });
+
+  const rmTax2 = await prisma.rawMaterialTax.upsert({
+    where: { id: 'rmtax-2' },
+    update: {},
+    create: {
+      id: 'rmtax-2',
+      name: 'COFINS',
+      rate: 7.6,
+      recoverable: true,
+    },
+  });
+
+  const rmTax3 = await prisma.rawMaterialTax.upsert({
+    where: { id: 'rmtax-3' },
+    update: {},
+    create: {
+      id: 'rmtax-3',
+      name: 'ICMS',
+      rate: 18.0,
+      recoverable: true,
+    },
+  });
+
+  const rmTax4 = await prisma.rawMaterialTax.upsert({
+    where: { id: 'rmtax-4' },
+    update: {},
+    create: {
+      id: 'rmtax-4',
+      name: 'IPI',
+      rate: 5.0,
+      recoverable: false,
+    },
+  });
+
+  const rmTax5 = await prisma.rawMaterialTax.upsert({
+    where: { id: 'rmtax-5' },
+    update: {},
+    create: {
+      id: 'rmtax-5',
+      name: 'IPI',
+      rate: 10.0,
+      recoverable: false,
+    },
+  });
+
+  const rmTax6 = await prisma.rawMaterialTax.upsert({
+    where: { id: 'rmtax-6' },
+    update: {},
+    create: {
+      id: 'rmtax-6',
+      name: 'II (Imposto Importação)',
+      rate: 14.0,
+      recoverable: false,
+    },
+  });
+
+  const rmTax7 = await prisma.rawMaterialTax.upsert({
+    where: { id: 'rmtax-7' },
+    update: {},
+    create: {
+      id: 'rmtax-7',
+      name: 'PIS',
+      rate: 2.1,
+      recoverable: false,
+    },
+  });
+
+  const rmTax8 = await prisma.rawMaterialTax.upsert({
+    where: { id: 'rmtax-8' },
+    update: {},
+    create: {
+      id: 'rmtax-8',
+      name: 'COFINS',
+      rate: 9.65,
+      recoverable: false,
+    },
+  });
+
+  const rmTax9 = await prisma.rawMaterialTax.upsert({
+    where: { id: 'rmtax-9' },
+    update: {},
+    create: {
+      id: 'rmtax-9',
+      name: 'SIMPLES',
+      rate: 8.0,
+      recoverable: false,
+    },
+  });
+
+  const rmTax10 = await prisma.rawMaterialTax.upsert({
+    where: { id: 'rmtax-10' },
+    update: {},
+    create: {
+      id: 'rmtax-10',
+      name: 'PIS',
+      rate: 0.65,
+      recoverable: false,
+    },
+  });
+
+  const rmTax11 = await prisma.rawMaterialTax.upsert({
+    where: { id: 'rmtax-11' },
+    update: {},
+    create: {
+      id: 'rmtax-11',
+      name: 'COFINS',
+      rate: 3.0,
+      recoverable: false,
+    },
+  });
+
+  console.log('✅ Impostos de matéria-prima criados');
+
+  // ============================================
+  // 5. MATÉRIAS-PRIMAS (com relações N:N)
   // ============================================
   console.log('\n📦 Criando matérias-primas...');
 
@@ -183,13 +358,15 @@ async function main() {
       currency: Currency.BRL,
       priceConvertedBrl: 8.5,
       additionalCost: 0.5,
-      freightId: freight1.id,
+      freights: {
+        connect: [{ id: freight1.id }],
+      },
       rawMaterialTaxes: {
-        create: [
-          { name: 'PIS', rate: 1.65, recoverable: true },
-          { name: 'COFINS', rate: 7.6, recoverable: true },
-          { name: 'ICMS', rate: 18.0, recoverable: true },
-          { name: 'IPI', rate: 5.0, recoverable: false },
+        connect: [
+          { id: rmTax1.id },
+          { id: rmTax2.id },
+          { id: rmTax3.id },
+          { id: rmTax4.id },
         ],
       },
     },
@@ -210,13 +387,15 @@ async function main() {
       currency: Currency.BRL,
       priceConvertedBrl: 12.0,
       additionalCost: 0.8,
-      freightId: freight1.id,
+      freights: {
+        connect: [{ id: freight1.id }],
+      },
       rawMaterialTaxes: {
-        create: [
-          { name: 'PIS', rate: 1.65, recoverable: true },
-          { name: 'COFINS', rate: 7.6, recoverable: true },
-          { name: 'ICMS', rate: 18.0, recoverable: true },
-          { name: 'IPI', rate: 10.0, recoverable: false },
+        connect: [
+          { id: rmTax1.id },
+          { id: rmTax2.id },
+          { id: rmTax3.id },
+          { id: rmTax5.id },
         ],
       },
     },
@@ -235,15 +414,17 @@ async function main() {
       paymentTerm: 60,
       acquisitionPrice: 45.0,
       currency: Currency.USD,
-      priceConvertedBrl: 225.0, // Cotação aproximada 1 USD = 5 BRL
+      priceConvertedBrl: 225.0,
       additionalCost: 15.0,
-      freightId: freight2.id,
+      freights: {
+        connect: [{ id: freight2.id }],
+      },
       rawMaterialTaxes: {
-        create: [
-          { name: 'II (Imposto Importação)', rate: 14.0, recoverable: false },
-          { name: 'PIS', rate: 2.1, recoverable: false },
-          { name: 'COFINS', rate: 9.65, recoverable: false },
-          { name: 'ICMS', rate: 18.0, recoverable: true },
+        connect: [
+          { id: rmTax6.id },
+          { id: rmTax7.id },
+          { id: rmTax8.id },
+          { id: rmTax3.id },
         ],
       },
     },
@@ -264,11 +445,11 @@ async function main() {
       currency: Currency.BRL,
       priceConvertedBrl: 0.85,
       additionalCost: 0.05,
-      freightId: freight3.id,
+      freights: {
+        connect: [{ id: freight3.id }],
+      },
       rawMaterialTaxes: {
-        create: [
-          { name: 'SIMPLES', rate: 8.0, recoverable: false },
-        ],
+        connect: [{ id: rmTax9.id }],
       },
     },
   });
@@ -288,12 +469,14 @@ async function main() {
       currency: Currency.BRL,
       priceConvertedBrl: 89.0,
       additionalCost: 5.0,
-      freightId: freight1.id,
+      freights: {
+        connect: [{ id: freight1.id }],
+      },
       rawMaterialTaxes: {
-        create: [
-          { name: 'PIS', rate: 0.65, recoverable: false },
-          { name: 'COFINS', rate: 3.0, recoverable: false },
-          { name: 'ICMS', rate: 18.0, recoverable: true },
+        connect: [
+          { id: rmTax10.id },
+          { id: rmTax11.id },
+          { id: rmTax3.id },
         ],
       },
     },
@@ -314,11 +497,11 @@ async function main() {
       currency: Currency.BRL,
       priceConvertedBrl: 2.5,
       additionalCost: 0.15,
-      freightId: freight1.id,
+      freights: {
+        connect: [{ id: freight1.id }],
+      },
       rawMaterialTaxes: {
-        create: [
-          { name: 'SIMPLES', rate: 8.0, recoverable: false },
-        ],
+        connect: [{ id: rmTax9.id }],
       },
     },
   });
@@ -327,7 +510,7 @@ async function main() {
   console.log(`✅ ${rawMaterials.length} matérias-primas criadas`);
 
   // ============================================
-  // 4. CUSTOS FIXOS (Overhead)
+  // 6. CUSTOS FIXOS (Overhead)
   // ============================================
   console.log('\n💼 Criando custos fixos...');
 
@@ -370,7 +553,7 @@ async function main() {
   console.log('✅ Custos fixos criados');
 
   // ============================================
-  // 5. GRUPOS DE PRODUTOS
+  // 7. GRUPOS DE PRODUTOS
   // ============================================
   console.log('\n📂 Criando grupos de produtos...');
 
@@ -404,7 +587,7 @@ async function main() {
   console.log('✅ Grupos de produtos criados');
 
   // ============================================
-  // 6. PRODUTOS
+  // 8. PRODUTOS
   // ============================================
   console.log('\n📦 Criando produtos...');
 
@@ -429,6 +612,9 @@ async function main() {
           { rawMaterialId: mp006.id, quantity: 1.0 },
         ],
       },
+      freights: {
+        connect: [{ id: freight1.id }],
+      },
     },
   });
 
@@ -450,6 +636,9 @@ async function main() {
           { rawMaterialId: mp002.id, quantity: 2.5 },
           { rawMaterialId: mp006.id, quantity: 1.0 },
         ],
+      },
+      freights: {
+        connect: [{ id: freight1.id }, { id: freight3.id }],
       },
     },
   });
@@ -475,6 +664,9 @@ async function main() {
           { rawMaterialId: mp006.id, quantity: 2.0 },
         ],
       },
+      freights: {
+        connect: [{ id: freight2.id }],
+      },
     },
   });
 
@@ -496,6 +688,9 @@ async function main() {
           { rawMaterialId: mp006.id, quantity: 1.0 },
         ],
       },
+      freights: {
+        connect: [{ id: freight3.id }],
+      },
     },
   });
 
@@ -514,17 +709,19 @@ async function main() {
       productRawMaterials: {
         create: [{ rawMaterialId: mp006.id, quantity: 1.0 }],
       },
+      freights: {
+        connect: [{ id: freight1.id }],
+      },
     },
   });
 
   console.log('✅ Produtos criados com sucesso');
 
   // ============================================
-  // 7. LOGS DE ALTERAÇÃO (Exemplo)
+  // 9. LOGS DE ALTERAÇÃO (Exemplo)
   // ============================================
   console.log('\n📝 Criando logs de exemplo...');
 
-  // Verificar se já existe log antes de criar
   const existingLog = await prisma.rawMaterialChangeLog.findFirst({
     where: {
       rawMaterialId: mp001.id,
@@ -539,7 +736,7 @@ async function main() {
         field: 'acquisitionPrice',
         oldValue: '8.00',
         newValue: '8.50',
-        changedBy: users[3].id,
+        userId: users[3].id,
         changedAt: new Date(),
       },
     });

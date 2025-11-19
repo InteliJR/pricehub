@@ -29,8 +29,10 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  createdProducts Product[]
-  revokedTokens   RevokedToken[]
+  createdProducts       Product[]
+  revokedTokens         RevokedToken[]
+  
+  rawMaterialChangeLogs RawMaterialChangeLog[] 
 
   @@map("users")
 }
@@ -66,37 +68,38 @@ enum FreightOperationType {
 }
 
 model Freight {
-  id               String               @id @default(uuid())
-  name             String
-  description      String?              @db.Text
-  unitPrice        Decimal              @db.Decimal(12, 2)
-  currency         Currency             @default(BRL)
-  originUf         String
-  originCity       String
-  destinationUf    String
-  destinationCity  String
-  cargoType        String
-  operationType    FreightOperationType
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
+  id              String               @id @default(uuid())
+  name            String
+  description     String?              @db.Text
+  unitPrice       Decimal              @db.Decimal(12, 2)
+  currency        Currency             @default(BRL)
+  originUf        String
+  originCity      String
+  destinationUf   String
+  destinationCity String
+  cargoType       String
+  operationType   FreightOperationType
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
   freightTaxes FreightTax[]
+  
   rawMaterials RawMaterial[]
+  
+  products     Product[]
 
   @@map("freights")
 }
 
 model FreightTax {
   id        String   @id @default(uuid())
-  freightId String
   name      String
   rate      Decimal  @db.Decimal(5, 2)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  freight Freight @relation(fields: [freightId], references: [id], onDelete: Cascade)
+  freights Freight[]
 
-  @@index([freightId])
   @@map("freight_taxes")
 }
 
@@ -117,29 +120,32 @@ enum MeasurementUnit {
 }
 
 model RawMaterial {
-  id                 String          @id @default(uuid())
-  code               String          @unique
-  name               String
-  description        String?         @db.Text
-  measurementUnit    MeasurementUnit
-  inputGroup         String?
-  paymentTerm        Int
-  acquisitionPrice   Decimal         @db.Decimal(12, 2)
-  currency           Currency        @default(BRL)
-  priceConvertedBrl  Decimal         @db.Decimal(12, 2)
-  additionalCost     Decimal         @default(0) @db.Decimal(12, 2)
-  freightId          String
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
+  id                String          @id @default(uuid())
+  code              String          @unique
+  name              String
+  description       String?         @db.Text
+  measurementUnit   MeasurementUnit
+  inputGroup        String?
+  paymentTerm       Int
+  acquisitionPrice  Decimal         @db.Decimal(12, 2)
+  currency          Currency        @default(BRL)
+  priceConvertedBrl Decimal         @db.Decimal(12, 2)
+  additionalCost    Decimal         @default(0) @db.Decimal(12, 2)
+  
+  // REMOVIDO: freightId e relação singular freight
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
-  freight              Freight                @relation(fields: [freightId], references: [id], onDelete: Restrict)
-  productRawMaterials  ProductRawMaterial[]
-  changeLogs           RawMaterialChangeLog[]
-  rawMaterialTaxes     RawMaterialTax[]
+  productRawMaterials ProductRawMaterial[]
+  changeLogs          RawMaterialChangeLog[]
+  
+  rawMaterialTaxes    RawMaterialTax[]
+  
+  freights            Freight[]
 
   @@index([code])
   @@index([name])
-  @@index([freightId])
   @@map("raw_materials")
 }
 
@@ -149,28 +155,30 @@ model RawMaterialChangeLog {
   field         String
   oldValue      String?
   newValue      String?
-  changedBy     String
+  
+  userId        String   
   changedAt     DateTime @default(now())
 
-  rawMaterial RawMaterial @relation(fields: [rawMaterialId], references: [id], onDelete: Cascade)
+  rawMaterial   RawMaterial @relation(fields: [rawMaterialId], references: [id], onDelete: Cascade)
+  
+  user          User        @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([rawMaterialId])
+  @@index([userId])       
   @@index([changedAt])
   @@map("raw_material_change_logs")
 }
 
 model RawMaterialTax {
-  id            String   @id @default(uuid())
-  rawMaterialId String
-  name          String
-  rate          Decimal  @db.Decimal(5, 2)
-  recoverable   Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id          String   @id @default(uuid())
+  name        String
+  rate        Decimal  @db.Decimal(5, 2)
+  recoverable Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  rawMaterial RawMaterial @relation(fields: [rawMaterialId], references: [id], onDelete: Cascade)
+  rawMaterials RawMaterial[]
 
-  @@index([rawMaterialId])
   @@map("raw_material_taxes")
 }
 
@@ -204,10 +212,12 @@ model Product {
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 
-  creator             User                 @relation(fields: [creatorId], references: [id])
-  fixedCost           FixedCost?           @relation(fields: [fixedCostId], references: [id], onDelete: SetNull)
-  productGroup        ProductGroup?        @relation(fields: [productGroupId], references: [id], onDelete: SetNull)
+  creator             User                @relation(fields: [creatorId], references: [id])
+  fixedCost           FixedCost?          @relation(fields: [fixedCostId], references: [id], onDelete: SetNull)
+  productGroup        ProductGroup?       @relation(fields: [productGroupId], references: [id], onDelete: SetNull)
   productRawMaterials ProductRawMaterial[]
+  
+  freights            Freight[]
 
   @@index([code])
   @@index([name])
