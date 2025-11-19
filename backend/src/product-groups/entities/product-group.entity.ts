@@ -8,6 +8,7 @@ export class ProductGroupEntity {
   volumePercentageByQuantity: number;
   volumePercentageByValue: number;
   averagePrice: number;
+  totalValue: number;
   createdAt: Date;
   updatedAt: Date;
 }

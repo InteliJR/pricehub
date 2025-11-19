@@ -206,14 +206,27 @@ export class ProductGroupsService {
   }
 
   private mapToEntity(group: any): ProductGroupEntity {
+    // 1. Calcular o valor total (mesmo que na criação geralmente seja 0, é bom garantir)
+    const groupValue = group.products?.reduce(
+      (sum: number, p: any) => sum + (p.priceWithTaxesAndFreight?.toNumber() || 0),
+      0,
+    ) || 0;
+
+    const productsCount = group.products?.length || 0;
+    const averagePrice = productsCount > 0 ? groupValue / productsCount : 0;
+
     return {
       id: group.id,
       name: group.name,
       description: group.description,
-      productsCount: group.products?.length || 0,
+      productsCount: productsCount,
+      
+      // ADICIONE ESTA LINHA PARA CORRIGIR O ERRO:
+      totalValue: Number(groupValue.toFixed(2)), 
+      
       volumePercentageByQuantity: 0,
       volumePercentageByValue: 0,
-      averagePrice: 0,
+      averagePrice: Number(averagePrice.toFixed(2)),
       createdAt: group.createdAt,
       updatedAt: group.updatedAt,
     };
@@ -246,6 +259,7 @@ export class ProductGroupsService {
       name: group.name,
       description: group.description,
       productsCount,
+      totalValue: Number(groupValue.toFixed(2)),
       volumePercentageByQuantity: Number(volumePercentageByQuantity.toFixed(2)),
       volumePercentageByValue: Number(volumePercentageByValue.toFixed(2)),
       averagePrice: Number(averagePrice.toFixed(2)),
@@ -279,6 +293,10 @@ export class ProductGroupsService {
         case 'averagePrice':
           valueA = a.averagePrice;
           valueB = b.averagePrice;
+          break;
+        case 'totalValue': // <--- ADICIONAR CASE
+          valueA = a.totalValue;
+          valueB = b.totalValue;
           break;
         default:
           valueA = a.name.toLowerCase();
