@@ -95,7 +95,12 @@ export class ProductsService {
             include: {
               rawMaterial: {
                 include: {
-                  freight: true,
+                  freights: {
+                    // PLURAL
+                    include: {
+                      freightTaxes: true,
+                    },
+                  },
                   rawMaterialTaxes: true,
                 },
               },
@@ -232,7 +237,8 @@ export class ProductsService {
             include: {
               rawMaterial: {
                 include: {
-                  freight: {
+                  freights: {
+                    // PLURAL
                     include: {
                       freightTaxes: true,
                     },
@@ -384,7 +390,12 @@ export class ProductsService {
             include: {
               rawMaterial: {
                 include: {
-                  freight: true,
+                  freights: {
+                    // PLURAL
+                    include: {
+                      freightTaxes: true,
+                    },
+                  },
                   rawMaterialTaxes: true,
                 },
               },
@@ -444,7 +455,8 @@ export class ProductsService {
         },
         include: {
           rawMaterialTaxes: true,
-          freight: {
+          freights: {
+            // PLURAL
             include: {
               freightTaxes: true,
             },
@@ -487,6 +499,7 @@ export class ProductsService {
         );
         const subtotal = unitPrice * quantity;
 
+        // --- CÁLCULO IMPOSTOS DA MATÉRIA-PRIMA ---
         const taxes: Record<string, number> = {};
         let taxesTotal = 0;
 
@@ -500,17 +513,30 @@ export class ProductsService {
           }
         }
 
-        const freightSubtotal =
-          Number(rmData.freight?.unitPrice || 0) * quantity;
-
-        const freightTaxes: Record<string, number> = {};
+        // --- CÁLCULO DO FRETE (LÓGICA NOVA: SOMA DE MÚLTIPLOS FRETES) ---
+        let freightSubtotal = 0;
         let freightTaxesTotal = 0;
+        const freightTaxes: Record<string, number> = {};
 
-        if (rmData.freight?.freightTaxes) {
-          for (const freightTax of rmData.freight.freightTaxes) {
-            const taxValue = (freightSubtotal * Number(freightTax.rate)) / 100;
-            freightTaxes[freightTax.name] = Number(taxValue.toFixed(2));
-            freightTaxesTotal += taxValue;
+        // Se existirem fretes associados
+        if (rmData.freights && rmData.freights.length > 0) {
+          for (const freight of rmData.freights) {
+            // Custo base do frete
+            const currentFreightCost =
+              Number(freight.unitPrice || 0) * quantity;
+            freightSubtotal += currentFreightCost;
+
+            // Impostos do frete
+            if (freight.freightTaxes) {
+              for (const fTax of freight.freightTaxes) {
+                const taxValue = (currentFreightCost * Number(fTax.rate)) / 100;
+                // Agrega valores se houver nomes repetidos, ou cria nova chave
+                const key = fTax.name;
+                freightTaxes[key] =
+                  (freightTaxes[key] || 0) + Number(taxValue.toFixed(2));
+                freightTaxesTotal += taxValue;
+              }
+            }
           }
         }
 
@@ -532,8 +558,12 @@ export class ProductsService {
             ...taxes,
             total: Number(taxesTotal.toFixed(2)),
           },
+          // Objeto de frete agora é um agregado dos múltiplos fretes
           freight: {
-            unitPrice: Number(rmData.freight?.unitPrice || 0),
+            unitPrice:
+              quantity > 0
+                ? Number((freightSubtotal / quantity).toFixed(2))
+                : 0, // Preço médio unitário de frete
             quantity,
             subtotal: Number(freightSubtotal.toFixed(2)),
             taxes: {

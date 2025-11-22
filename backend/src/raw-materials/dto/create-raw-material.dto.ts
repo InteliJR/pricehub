@@ -1,5 +1,3 @@
-// src/raw-materials/dto/create-raw-material.dto.ts
-
 import {
   IsString,
   IsNotEmpty,
@@ -26,7 +24,9 @@ export class RawMaterialTaxDto {
 
   @IsString()
   @IsNotEmpty({ message: 'Nome do imposto é obrigatório' })
-  @MaxLength(40, { message: 'Nome do imposto deve ter no máximo 40 caracteres' })
+  @MaxLength(40, {
+    message: 'Nome do imposto deve ter no máximo 40 caracteres',
+  })
   name: string;
 
   @IsNumber()
@@ -62,7 +62,9 @@ export class CreateRawMaterialDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(60, { message: 'Grupo de insumo deve ter no máximo 60 caracteres' })
+  @MaxLength(60, {
+    message: 'Grupo de insumo deve ter no máximo 60 caracteres',
+  })
   inputGroup?: string;
 
   @IsNumber()
@@ -85,9 +87,10 @@ export class CreateRawMaterialDto {
   @Min(0, { message: 'Custo adicional não pode ser negativo' })
   additionalCost: number;
 
-  @IsUUID('4', { message: 'ID de frete inválido' })
-  @IsNotEmpty({ message: 'Frete é obrigatório' })
-  freightId: string;
+  // MUDANÇA AQUI: Array de IDs em vez de ID único
+  @IsArray({ message: 'Deve fornecer uma lista de fretes (pode ser vazia)' })
+  @IsUUID('4', { each: true, message: 'ID de frete inválido' })
+  freightIds: string[];
 
   @IsArray()
   @ValidateNested({ each: true })

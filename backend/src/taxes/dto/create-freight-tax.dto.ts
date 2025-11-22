@@ -1,5 +1,3 @@
-// src/taxes/dto/create-freight-tax.dto.ts
-
 import {
   IsString,
   IsNotEmpty,
@@ -9,6 +7,7 @@ import {
   IsUUID,
   MaxLength,
   MinLength,
+  IsArray,
 } from 'class-validator';
 
 export class CreateFreightTaxDto {
@@ -23,7 +22,7 @@ export class CreateFreightTaxDto {
   @Max(100, { message: 'Taxa deve ser no máximo 100%' })
   rate: number;
 
-  @IsUUID('4', { message: 'ID do frete inválido' })
-  @IsNotEmpty({ message: 'Frete é obrigatório' })
-  freightId: string;
+  @IsArray({ message: 'Deve fornecer uma lista de fretes' })
+  @IsUUID('4', { each: true, message: 'ID de frete inválido' })
+  freightIds: string[];
 }

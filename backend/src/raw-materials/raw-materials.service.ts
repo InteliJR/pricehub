@@ -1,5 +1,3 @@
-// src/raw-materials/raw-materials.service.ts
-
 import {
   Injectable,
   NotFoundException,
@@ -15,12 +13,10 @@ import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class RawMaterialsService {
-  constructor(
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async create(createRawMaterialDto: CreateRawMaterialDto, userId: string) {
-    // Verifica se o código já existe
+    // 1. Verifica se o código já existe
     const existingCode = await this.prisma.rawMaterial.findUnique({
       where: { code: createRawMaterialDto.code.toUpperCase() },
     });
@@ -31,16 +27,22 @@ export class RawMaterialsService {
       );
     }
 
-    // Verifica se o frete existe
-    const freight = await this.prisma.freight.findUnique({
-      where: { id: createRawMaterialDto.freightId },
-    });
-
-    if (!freight) {
-      throw new BadRequestException('Frete não encontrado');
+    // 2. Verifica se os fretes existem (se houver IDs)
+    if (
+      createRawMaterialDto.freightIds &&
+      createRawMaterialDto.freightIds.length > 0
+    ) {
+      const count = await this.prisma.freight.count({
+        where: { id: { in: createRawMaterialDto.freightIds } },
+      });
+      if (count !== createRawMaterialDto.freightIds.length) {
+        throw new BadRequestException(
+          'Um ou mais IDs de frete não foram encontrados',
+        );
+      }
     }
 
-    // Cria a matéria-prima com os impostos
+    // 3. Cria a matéria-prima
     const rawMaterial = await this.prisma.rawMaterial.create({
       data: {
         code: createRawMaterialDto.code.toUpperCase(),
@@ -53,7 +55,11 @@ export class RawMaterialsService {
         currency: createRawMaterialDto.currency,
         priceConvertedBrl: createRawMaterialDto.priceConvertedBrl,
         additionalCost: createRawMaterialDto.additionalCost,
-        freightId: createRawMaterialDto.freightId,
+        // Conexão N:M com Fretes
+        freights: {
+          connect: createRawMaterialDto.freightIds.map((id) => ({ id })),
+        },
+        // Criação aninhada de Impostos
         rawMaterialTaxes: {
           create: createRawMaterialDto.rawMaterialTaxes.map((tax) => ({
             name: tax.name,
@@ -63,7 +69,8 @@ export class RawMaterialsService {
         },
       },
       include: {
-        freight: {
+        freights: {
+          // PLURAL
           select: {
             id: true,
             name: true,
@@ -75,7 +82,7 @@ export class RawMaterialsService {
       },
     });
 
-    // Registra a criação no log
+    // 4. Log
     await this.createChangeLog(
       rawMaterial.id,
       'created',
@@ -88,7 +95,15 @@ export class RawMaterialsService {
   }
 
   async findAll(query: QueryRawMaterialDto) {
-    const { page = 1, limit = 10, search, measurementUnit, inputGroup, sortBy = 'name', sortOrder = 'asc' } = query;
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      measurementUnit,
+      inputGroup,
+      sortBy = 'name',
+      sortOrder = 'asc',
+    } = query;
 
     const skip = (page - 1) * limit;
 
@@ -105,11 +120,12 @@ export class RawMaterialsService {
             }
           : {},
         measurementUnit ? { measurementUnit } : {},
-        inputGroup ? { inputGroup: { contains: inputGroup, mode: 'insensitive' } } : {},
+        inputGroup
+          ? { inputGroup: { contains: inputGroup, mode: 'insensitive' } }
+          : {},
       ],
     };
 
-    // Ordenação
     const orderBy: Prisma.RawMaterialOrderByWithRelationInput = {
       [sortBy]: sortOrder,
     };
@@ -121,7 +137,8 @@ export class RawMaterialsService {
         take: limit,
         orderBy,
         include: {
-          freight: {
+          freights: {
+            // PLURAL
             select: {
               id: true,
               name: true,
@@ -150,7 +167,8 @@ export class RawMaterialsService {
     const rawMaterial = await this.prisma.rawMaterial.findUnique({
       where: { id },
       include: {
-        freight: {
+        freights: {
+          // PLURAL
           select: {
             id: true,
             name: true,
@@ -169,11 +187,21 @@ export class RawMaterialsService {
     return rawMaterial;
   }
 
-  async update(id: string, updateRawMaterialDto: UpdateRawMaterialDto, userId: string) {
-    // Verifica se existe
-    const existing = await this.findOne(id);
+  async update(
+    id: string,
+    updateRawMaterialDto: UpdateRawMaterialDto,
+    userId: string,
+  ) {
+    // 1. Busca o existente
+    const existing = await this.prisma.rawMaterial.findUnique({
+      where: { id },
+      include: { freights: { select: { id: true } } },
+    });
 
-    // Verifica código duplicado
+    if (!existing) {
+      throw new NotFoundException('Matéria-prima não encontrada');
+    } // 2. Validação de Código Único
+
     if (updateRawMaterialDto.code) {
       const codeExists = await this.prisma.rawMaterial.findFirst({
         where: {
@@ -181,44 +209,79 @@ export class RawMaterialsService {
           NOT: { id },
         },
       });
-
       if (codeExists) {
-        throw new ConflictException('Já existe uma matéria-prima com este código');
+        throw new ConflictException(
+          'Já existe uma matéria-prima com este código',
+        );
       }
-    }
+    } // 3. Validação de Fretes (se fornecidos)
 
-    // Verifica frete se foi alterado
-    if (updateRawMaterialDto.freightId) {
-      const freight = await this.prisma.freight.findUnique({
-        where: { id: updateRawMaterialDto.freightId },
+    if (updateRawMaterialDto.freightIds) {
+      const count = await this.prisma.freight.count({
+        where: { id: { in: updateRawMaterialDto.freightIds } },
       });
-
-      if (!freight) {
-        throw new BadRequestException('Frete não encontrado');
+      if (count !== updateRawMaterialDto.freightIds.length) {
+        throw new BadRequestException('Um ou mais fretes não encontrados');
       }
-    }
+    } // 4. Registrar Log de Mudanças
 
-    // Registra mudanças
-    await this.logChanges(existing, updateRawMaterialDto, userId);
+    await this.logChanges(existing, updateRawMaterialDto, userId); // 5. Preparar dados do Update
 
-    // Atualiza a matéria-prima
+    const data: Prisma.RawMaterialUpdateInput = {
+      ...(updateRawMaterialDto.code && {
+        code: updateRawMaterialDto.code.toUpperCase(),
+      }),
+      ...(updateRawMaterialDto.name && { name: updateRawMaterialDto.name }),
+      ...(updateRawMaterialDto.description !== undefined && {
+        description: updateRawMaterialDto.description,
+      }),
+      ...(updateRawMaterialDto.measurementUnit && {
+        measurementUnit: updateRawMaterialDto.measurementUnit,
+      }),
+      ...(updateRawMaterialDto.inputGroup !== undefined && {
+        inputGroup: updateRawMaterialDto.inputGroup,
+      }),
+      ...(updateRawMaterialDto.paymentTerm !== undefined && {
+        paymentTerm: updateRawMaterialDto.paymentTerm,
+      }),
+      ...(updateRawMaterialDto.acquisitionPrice !== undefined && {
+        acquisitionPrice: updateRawMaterialDto.acquisitionPrice,
+      }),
+      ...(updateRawMaterialDto.currency && {
+        currency: updateRawMaterialDto.currency,
+      }),
+      ...(updateRawMaterialDto.priceConvertedBrl !== undefined && {
+        priceConvertedBrl: updateRawMaterialDto.priceConvertedBrl,
+      }),
+      ...(updateRawMaterialDto.additionalCost !== undefined && {
+        additionalCost: updateRawMaterialDto.additionalCost,
+      }),
+    }; // Atualização de Fretes (N:M)
+
+    if (updateRawMaterialDto.freightIds !== undefined) {
+      data.freights = {
+        set: updateRawMaterialDto.freightIds.map((fid) => ({ id: fid })),
+      };
+    } // Atualização de Impostos
+
+    if (updateRawMaterialDto.rawMaterialTaxes) {
+      data.rawMaterialTaxes = {
+        set: [],
+        create: updateRawMaterialDto.rawMaterialTaxes.map((tax) => ({
+          name: tax.name,
+          rate: tax.rate,
+          recoverable: tax.recoverable,
+        })),
+      };
+    } // 6. Executar Update
+
     const updated = await this.prisma.rawMaterial.update({
       where: { id },
-      data: {
-        ...(updateRawMaterialDto.code && { code: updateRawMaterialDto.code.toUpperCase() }),
-        ...(updateRawMaterialDto.name && { name: updateRawMaterialDto.name }),
-        ...(updateRawMaterialDto.description !== undefined && { description: updateRawMaterialDto.description }),
-        ...(updateRawMaterialDto.measurementUnit && { measurementUnit: updateRawMaterialDto.measurementUnit }),
-        ...(updateRawMaterialDto.inputGroup !== undefined && { inputGroup: updateRawMaterialDto.inputGroup }),
-        ...(updateRawMaterialDto.paymentTerm !== undefined && { paymentTerm: updateRawMaterialDto.paymentTerm }),
-        ...(updateRawMaterialDto.acquisitionPrice !== undefined && { acquisitionPrice: updateRawMaterialDto.acquisitionPrice }),
-        ...(updateRawMaterialDto.currency && { currency: updateRawMaterialDto.currency }),
-        ...(updateRawMaterialDto.priceConvertedBrl !== undefined && { priceConvertedBrl: updateRawMaterialDto.priceConvertedBrl }),
-        ...(updateRawMaterialDto.additionalCost !== undefined && { additionalCost: updateRawMaterialDto.additionalCost }),
-        ...(updateRawMaterialDto.freightId && { freightId: updateRawMaterialDto.freightId }),
-      },
+      data,
       include: {
-        freight: {
+        // REMOVIDO: freight: { ... } <- Isso causava o erro
+        freights: {
+          // Mantido apenas o Plural
           select: {
             id: true,
             name: true,
@@ -230,35 +293,13 @@ export class RawMaterialsService {
       },
     });
 
-    // Atualiza impostos se fornecidos
-    if (updateRawMaterialDto.rawMaterialTaxes) {
-      // Remove impostos antigos
-      await this.prisma.rawMaterialTax.deleteMany({
-        where: { rawMaterialId: id },
-      });
-
-      // Cria novos impostos
-      await this.prisma.rawMaterialTax.createMany({
-        data: updateRawMaterialDto.rawMaterialTaxes.map((tax) => ({
-          rawMaterialId: id,
-          name: tax.name,
-          rate: tax.rate,
-          recoverable: tax.recoverable,
-        })),
-      });
-
-      // Recarrega com os novos impostos
-      return this.findOne(id);
-    }
-
     return updated;
   }
 
   async remove(id: string) {
-    // Verifica se existe
     await this.findOne(id);
 
-    // Verifica se está sendo usado em algum produto
+    // Verifica dependência em Produtos
     const productsUsing = await this.prisma.productRawMaterial.count({
       where: { rawMaterialId: id },
     });
@@ -269,26 +310,35 @@ export class RawMaterialsService {
       );
     }
 
-    // Deleta (os impostos e logs são deletados em cascata)
-    await this.prisma.rawMaterial.delete({
-      where: { id },
-    });
-
+    await this.prisma.rawMaterial.delete({ where: { id } });
     return { message: 'Matéria-prima excluída com sucesso' };
   }
 
+  // ==========================================
+  // LOGS E HISTÓRICO
+  // ==========================================
+
+  // 1. Histórico específico de uma Matéria-Prima
   async getChangeLogs(id: string, page: number = 1, limit: number = 20) {
-    // Verifica se a matéria-prima existe
-    await this.findOne(id);
+    await this.findOne(id); // Garante existência
 
     const skip = (page - 1) * limit;
-
     const [data, total] = await Promise.all([
       this.prisma.rawMaterialChangeLog.findMany({
         where: { rawMaterialId: id },
         skip,
         take: limit,
         orderBy: { changedAt: 'desc' },
+        // AQUI ESTÁ A MÁGICA: Incluímos os dados do usuário
+        include: {
+          user: {
+            select: {
+              name: true,
+              email: true,
+              // id: true // Se precisar do ID também, descomente
+            },
+          },
+        },
       }),
       this.prisma.rawMaterialChangeLog.count({
         where: { rawMaterialId: id },
@@ -310,71 +360,30 @@ export class RawMaterialsService {
     };
   }
 
+  // 2. Lista geral das últimas alterações (Dashboard)
   async getRecentChanges(limit: number = 10) {
     return this.prisma.rawMaterialChangeLog.findMany({
       take: limit,
       orderBy: { changedAt: 'desc' },
-    });
-  }
-
-  async export(exportDto: ExportRawMaterialDto) {
-    const { limit = 500, sortBy = 'name', sortOrder = 'asc', filters } = exportDto;
-
-    // Construir filtros
-    const where: Prisma.RawMaterialWhereInput = {
-      AND: [
-        filters?.search
-          ? {
-              OR: [
-                { code: { contains: filters.search, mode: 'insensitive' } },
-                { name: { contains: filters.search, mode: 'insensitive' } },
-                { inputGroup: { contains: filters.search, mode: 'insensitive' } },
-              ],
-            }
-          : {},
-        filters?.measurementUnit ? { measurementUnit: filters.measurementUnit } : {},
-        filters?.inputGroup ? { inputGroup: { contains: filters.inputGroup, mode: 'insensitive' } } : {},
-      ],
-    };
-
-    const orderBy: Prisma.RawMaterialOrderByWithRelationInput = {
-      [sortBy]: sortOrder,
-    };
-
-    const data = await this.prisma.rawMaterial.findMany({
-      where,
-      take: limit,
-      orderBy,
       include: {
-        freight: true,
-        rawMaterialTaxes: true,
+        // Trazemos o nome da matéria-prima para saber O QUE foi alterado
+        rawMaterial: {
+          select: {
+            name: true,
+            code: true,
+          },
+        },
+        // Trazemos o usuário para saber QUEM alterou
+        user: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
       },
     });
-
-    // Formatar dados para CSV
-    const formattedData = data.map((item) => ({
-      Código: item.code,
-      Nome: item.name,
-      Descrição: item.description || '',
-      'Unidade de Medida': item.measurementUnit,
-      'Grupo de Insumo': item.inputGroup || '',
-      'Prazo de Pagamento': `${item.paymentTerm} dias`,
-      'Preço de Aquisição': item.acquisitionPrice.toString(),
-      Moeda: item.currency,
-      'Preço em BRL': item.priceConvertedBrl.toString(),
-      'Custo Adicional': item.additionalCost.toString(),
-      Frete: item.freight?.name || '',
-      'Preço do Frete': item.freight?.unitPrice.toString() || '',
-      Impostos: item.rawMaterialTaxes
-        .map((tax) => `${tax.name} (${tax.rate}%)${tax.recoverable ? ' - Recuperável' : ''}`)
-        .join('; '),
-    }));
-
-    // CORREÇÃO AQUI: chamada direta ao método privado desta classe
-    return this.generateCsv(formattedData);
   }
 
-  // Métodos auxiliares
   private async createChangeLog(
     rawMaterialId: string,
     field: string,
@@ -386,36 +395,11 @@ export class RawMaterialsService {
       data: {
         rawMaterialId,
         field,
-        oldValue,
-        newValue,
-        changedBy: userId,
+        oldValue: oldValue ? String(oldValue) : null,
+        newValue: newValue ? String(newValue) : null,
+        userId, // Corrigido: o campo no schema é 'userId', mapeado na relação
       },
     });
-  }
-
-  private generateCsv(data: any[]): string {
-    if (!data || data.length === 0) {
-      return '';
-    }
-
-    // 1. Cabeçalhos
-    const headers = Object.keys(data[0]);
-    const headerRow = headers.join(',');
-
-    // 2. Linhas de dados
-    const rows = data.map((row) => {
-      return headers
-        .map((fieldName) => {
-          const value = row[fieldName];
-          // Escapar aspas duplas e garantir que string seja retornada
-          const stringValue = value === null || value === undefined ? '' : String(value);
-          // Envolve em aspas para lidar com vírgulas dentro do conteúdo
-          return `"${stringValue.replace(/"/g, '""')}"`;
-        })
-        .join(',');
-    });
-
-    return [headerRow, ...rows].join('\n');
   }
 
   private async logChanges(
@@ -423,7 +407,7 @@ export class RawMaterialsService {
     updates: UpdateRawMaterialDto,
     userId: string,
   ) {
-    const fieldsToLog = [
+    const simpleFields = [
       'code',
       'name',
       'description',
@@ -434,19 +418,133 @@ export class RawMaterialsService {
       'currency',
       'priceConvertedBrl',
       'additionalCost',
-      'freightId',
     ];
 
-    for (const field of fieldsToLog) {
+    // 1. Campos Simples
+    for (const field of simpleFields) {
       if (updates[field] !== undefined && updates[field] !== existing[field]) {
         await this.createChangeLog(
           existing.id,
           field,
-          String(existing[field] || ''),
-          String(updates[field] || ''),
+          existing[field],
+          updates[field],
           userId,
         );
       }
     }
+
+    // 2. Campo Complexo: Fretes (Lista)
+    if (updates.freightIds !== undefined) {
+      // Ordena para garantir comparação consistente
+      const oldIds = existing.freights
+        .map((f: any) => f.id)
+        .sort()
+        .join(',');
+      const newIds = updates.freightIds.sort().join(',');
+
+      if (oldIds !== newIds) {
+        await this.createChangeLog(
+          existing.id,
+          'freights',
+          `[${existing.freights.length} fretes]`,
+          `[${updates.freightIds.length} fretes]`,
+          userId,
+        );
+      }
+    }
+  }
+
+  // ==========================================
+  // EXPORTAÇÃO
+  // ==========================================
+
+  async export(exportDto: ExportRawMaterialDto) {
+    const {
+      limit = 500,
+      sortBy = 'name',
+      sortOrder = 'asc',
+      filters,
+    } = exportDto;
+
+    const where: Prisma.RawMaterialWhereInput = {
+      AND: [
+        filters?.search
+          ? {
+              OR: [
+                { code: { contains: filters.search, mode: 'insensitive' } },
+                { name: { contains: filters.search, mode: 'insensitive' } },
+                {
+                  inputGroup: { contains: filters.search, mode: 'insensitive' },
+                },
+              ],
+            }
+          : {},
+        filters?.measurementUnit
+          ? { measurementUnit: filters.measurementUnit }
+          : {},
+        filters?.inputGroup
+          ? {
+              inputGroup: { contains: filters.inputGroup, mode: 'insensitive' },
+            }
+          : {},
+      ],
+    };
+
+    const data = await this.prisma.rawMaterial.findMany({
+      where,
+      take: limit,
+      orderBy: { [sortBy]: sortOrder },
+      include: {
+        freights: true, // PLURAL
+        rawMaterialTaxes: true,
+      },
+    });
+
+    const formattedData = data.map((item) => {
+      // Formatar lista de fretes para uma única string
+      const freightsStr = item.freights
+        .map((f) => `${f.name} (${f.currency} ${f.unitPrice})`)
+        .join('; ');
+
+      return {
+        Código: item.code,
+        Nome: item.name,
+        Descrição: item.description || '',
+        'Unidade de Medida': item.measurementUnit,
+        'Grupo de Insumo': item.inputGroup || '',
+        'Prazo de Pagamento': `${item.paymentTerm} dias`,
+        'Preço de Aquisição': item.acquisitionPrice.toString(),
+        Moeda: item.currency,
+        'Preço em BRL': item.priceConvertedBrl.toString(),
+        'Custo Adicional': item.additionalCost.toString(),
+        // Fretes agora é uma lista formatada
+        Fretes: freightsStr,
+        Impostos: item.rawMaterialTaxes
+          .map(
+            (tax) =>
+              `${tax.name} (${tax.rate}%)${tax.recoverable ? ' [Recuperável]' : ''}`,
+          )
+          .join('; '),
+      };
+    });
+
+    return this.generateCsv(formattedData);
+  }
+
+  private generateCsv(data: any[]): string {
+    if (!data || data.length === 0) return '';
+    const headers = Object.keys(data[0]);
+    const headerRow = headers.join(',');
+    const rows = data.map((row) => {
+      return headers
+        .map((fieldName) => {
+          const value = row[fieldName];
+          const stringValue =
+            value === null || value === undefined ? '' : String(value);
+          return `"${stringValue.replace(/"/g, '""')}"`;
+        })
+        .join(',');
+    });
+    return [headerRow, ...rows].join('\n');
   }
 }

@@ -1,5 +1,3 @@
-// src/taxes/dto/create-raw-material-tax.dto.ts
-
 import {
   IsString,
   IsNotEmpty,
@@ -10,6 +8,7 @@ import {
   IsBoolean,
   MaxLength,
   MinLength,
+  IsArray,
 } from 'class-validator';
 
 export class CreateRawMaterialTaxDto {
@@ -27,7 +26,7 @@ export class CreateRawMaterialTaxDto {
   @IsBoolean({ message: 'Recuperável deve ser verdadeiro ou falso' })
   recoverable: boolean;
 
-  @IsUUID('4', { message: 'ID da matéria-prima inválido' })
-  @IsNotEmpty({ message: 'Matéria-prima é obrigatória' })
-  rawMaterialId: string;
+  @IsArray({ message: 'Deve fornecer uma lista de matérias-primas' })
+  @IsUUID('4', { each: true, message: 'ID de matéria-prima inválido' })
+  rawMaterialIds: string[];
 }

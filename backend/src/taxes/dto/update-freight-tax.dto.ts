@@ -1,5 +1,3 @@
-// src/taxes/dto/update-freight-tax.dto.ts
-
 import { PartialType } from '@nestjs/mapped-types';
 import { CreateFreightTaxDto } from './create-freight-tax.dto';
 
