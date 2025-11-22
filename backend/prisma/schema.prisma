@@ -13,10 +13,10 @@ datasource db {
 // ============================================
 
 enum UserRole {
-  ADMIN       // Acessa tudo + gestão de usuários
-  COMERCIAL   // Vê produtos e matérias-primas
-  LOGISTICA   // Vê frete (além de admin)
-  IMPOSTO     // Mexe nas premissas/impostos (além de admin)
+  ADMIN
+  COMERCIAL
+  LOGISTICA
+  IMPOSTO
 }
 
 model User {
@@ -29,9 +29,10 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relações
-  createdProducts Product[]
-  revokedTokens   RevokedToken[]
+  createdProducts       Product[]
+  revokedTokens         RevokedToken[]
+  
+  rawMaterialChangeLogs RawMaterialChangeLog[] 
 
   @@map("users")
 }
@@ -43,48 +44,12 @@ model RevokedToken {
   expiresAt DateTime
   createdAt DateTime @default(now())
 
-  // Relações
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([token])
   @@index([expiresAt])
   @@index([userId])
   @@map("revoked_tokens")
-}
-
-// ============================================
-// IMPOSTOS E PREMISSAS
-// ============================================
-
-model Tax {
-  id          String   @id @default(uuid())
-  name        String
-  description String?  @db.Text
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relações
-  taxItems     TaxItem[]
-  rawMaterials RawMaterial[]
-
-  @@map("taxes")
-}
-
-// Items específicos de imposto (PIS, COFINS, ICMS, IPI, etc)
-model TaxItem {
-  id          String  @id @default(uuid())
-  taxId       String
-  name        String // PIS, COFINS, ICMS, IPI, IR e CSLL, COMISSÕES, etc
-  rate        Decimal @db.Decimal(5, 2) // Percentual (ex: 7.60)
-  recoverable Boolean @default(false) // Se é premissa recuperável
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relações
-  tax Tax @relation(fields: [taxId], references: [id], onDelete: Cascade)
-
-  @@index([taxId])
-  @@map("tax_items")
 }
 
 // ============================================
@@ -103,44 +68,38 @@ enum FreightOperationType {
 }
 
 model Freight {
-  id               String   @id @default(uuid())
-  name             String
-  description      String?  @db.Text
-  
-  unitPrice        Decimal  @db.Decimal(12, 2)
-  currency         Currency @default(BRL)
+  id              String               @id @default(uuid())
+  name            String
+  description     String?              @db.Text
+  unitPrice       Decimal              @db.Decimal(12, 2)
+  currency        Currency             @default(BRL)
+  originUf        String
+  originCity      String
+  destinationUf   String
+  destinationCity String
+  cargoType       String
+  operationType   FreightOperationType
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
-  // NOVOS CAMPOS
-  originUf         String
-  originCity       String
-  destinationUf    String
-  destinationCity  String
-  cargoType        String            // tipo da carga
-  operationType    FreightOperationType // interno ou externo
-
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  // Relações
   freightTaxes FreightTax[]
+  
   rawMaterials RawMaterial[]
+  
+  products     Product[]
 
   @@map("freights")
 }
 
-// Impostos do frete (ICMS, PIS, COFINS)
 model FreightTax {
-  id        String  @id @default(uuid())
-  freightId String
-  name      String // ICMS, PIS, COFINS
-  rate      Decimal @db.Decimal(5, 2)
+  id        String   @id @default(uuid())
+  name      String
+  rate      Decimal  @db.Decimal(5, 2)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relações
-  freight Freight @relation(fields: [freightId], references: [id], onDelete: Cascade)
+  freights Freight[]
 
-  @@index([freightId])
   @@map("freight_taxes")
 }
 
@@ -161,87 +120,71 @@ enum MeasurementUnit {
 }
 
 model RawMaterial {
-  id                 String          @id @default(uuid())
-  code               String          @unique
-  name               String
-  description        String?         @db.Text
-  measurementUnit    MeasurementUnit
-  inputGroup         String? // Grupo de insumo (texto livre)
-  paymentTerm        Int // dias
-  acquisitionPrice   Decimal         @db.Decimal(12, 2)
-  currency           Currency        @default(BRL)
-  priceConvertedBrl  Decimal         @db.Decimal(12, 2)
-  additionalCost     Decimal         @default(0) @db.Decimal(12, 2)
+  id                String          @id @default(uuid())
+  code              String          @unique
+  name              String
+  description       String?         @db.Text
+  measurementUnit   MeasurementUnit
+  inputGroup        String?
+  paymentTerm       Int
+  acquisitionPrice  Decimal         @db.Decimal(12, 2)
+  currency          Currency        @default(BRL)
+  priceConvertedBrl Decimal         @db.Decimal(12, 2)
+  additionalCost    Decimal         @default(0) @db.Decimal(12, 2)
   
-  // Relações obrigatórias (1 imposto, 1 frete)
-  taxId              String
-  freightId          String
+  // REMOVIDO: freightId e relação singular freight
   
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
-  // Relações
-  tax                Tax             @relation(fields: [taxId], references: [id], onDelete: Restrict)
-  freight            Freight         @relation(fields: [freightId], references: [id], onDelete: Restrict)
   productRawMaterials ProductRawMaterial[]
-  changeLogs         RawMaterialChangeLog[]
+  changeLogs          RawMaterialChangeLog[]
+  
+  rawMaterialTaxes    RawMaterialTax[]
+  
+  freights            Freight[]
 
   @@index([code])
   @@index([name])
-  @@index([taxId])
-  @@index([freightId])
   @@map("raw_materials")
 }
 
-// Log de alterações de matérias-primas
 model RawMaterialChangeLog {
   id            String   @id @default(uuid())
   rawMaterialId String
-  field         String // Nome do campo alterado
-  oldValue      String? // Valor antigo
-  newValue      String? // Valor novo
-  changedBy     String // ID do usuário que fez a alteração
+  field         String
+  oldValue      String?
+  newValue      String?
+  
+  userId        String   
   changedAt     DateTime @default(now())
 
-  // Relações
-  rawMaterial RawMaterial @relation(fields: [rawMaterialId], references: [id], onDelete: Cascade)
+  rawMaterial   RawMaterial @relation(fields: [rawMaterialId], references: [id], onDelete: Cascade)
+  
+  user          User        @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([rawMaterialId])
+  @@index([userId])       
   @@index([changedAt])
   @@map("raw_material_change_logs")
 }
 
-// ============================================
-// PRODUTOS
-// ============================================
-
-model Product {
+model RawMaterialTax {
   id          String   @id @default(uuid())
-  code        String   @unique
   name        String
-  description String?  @db.Text
-  creatorId   String
-  
-  priceWithoutTaxesAndFreight Decimal? @db.Decimal(12, 2)
-  priceWithTaxesAndFreight    Decimal? @db.Decimal(12, 2)
-  
-  fixedCostId String?
-  productGroupId String?  // <- NOVO CAMPO
-  
+  rate        Decimal  @db.Decimal(5, 2)
+  recoverable Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  creator             User              @relation(fields: [creatorId], references: [id])
-  fixedCost           FixedCost?        @relation(fields: [fixedCostId], references: [id], onDelete: SetNull)
-  productGroup        ProductGroup?     @relation(fields: [productGroupId], references: [id], onDelete: SetNull) // <- NOVA RELAÇÃO
-  productRawMaterials ProductRawMaterial[]
+  rawMaterials RawMaterial[]
 
-  @@index([code])
-  @@index([name])
-  @@index([fixedCostId])
-  @@index([productGroupId])  // <- NOVO ÍNDICE
-  @@map("products")
+  @@map("raw_material_taxes")
 }
+
+// ============================================
+// PRODUTOS E GRUPOS
+// ============================================
 
 model ProductGroup {
   id          String   @id @default(uuid())
@@ -250,16 +193,38 @@ model ProductGroup {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // Relações
   products Product[]
 
   @@index([name])
   @@map("product_groups")
 }
 
-// ============================================
-// RELAÇÃO PRODUTO <-> MATÉRIA-PRIMA
-// ============================================
+model Product {
+  id                          String   @id @default(uuid())
+  code                        String   @unique
+  name                        String
+  description                 String?  @db.Text
+  creatorId                   String
+  priceWithoutTaxesAndFreight Decimal? @db.Decimal(12, 2)
+  priceWithTaxesAndFreight    Decimal? @db.Decimal(12, 2)
+  fixedCostId                 String?
+  productGroupId              String?
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  creator             User                @relation(fields: [creatorId], references: [id])
+  fixedCost           FixedCost?          @relation(fields: [fixedCostId], references: [id], onDelete: SetNull)
+  productGroup        ProductGroup?       @relation(fields: [productGroupId], references: [id], onDelete: SetNull)
+  productRawMaterials ProductRawMaterial[]
+  
+  freights            Freight[]
+
+  @@index([code])
+  @@index([name])
+  @@index([fixedCostId])
+  @@index([productGroupId])
+  @@map("products")
+}
 
 model ProductRawMaterial {
   productId     String
@@ -268,7 +233,6 @@ model ProductRawMaterial {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  // Relações
   product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
   rawMaterial RawMaterial @relation(fields: [rawMaterialId], references: [id], onDelete: Restrict)
 
@@ -277,29 +241,25 @@ model ProductRawMaterial {
 }
 
 // ============================================
-// CUSTOS FIXOS (OVERHEAD)
+// CUSTOS FIXOS
 // ============================================
 
 model FixedCost {
-  id                String   @id @default(uuid())
-  description       String
-  code              String?  @unique
-  personnelExpenses Decimal  @db.Decimal(12, 2)
-  generalExpenses   Decimal  @db.Decimal(12, 2)
-  proLabore         Decimal  @db.Decimal(12, 2)
-  depreciation      Decimal  @default(0) @db.Decimal(12, 2)
-  totalCost         Decimal  @db.Decimal(12, 2)
-  
-  // Parâmetros para cálculo de overhead
-  considerationPercentage Decimal @default(100) @db.Decimal(5, 2) // % de gastos a considerar
-  salesVolume             Decimal @db.Decimal(12, 2) // Volume de vendas para cálculo
-  overheadPerUnit         Decimal @db.Decimal(12, 2) // Overhead por unidade
-  
-  calculationDate   DateTime @default(now())
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                      String   @id @default(uuid())
+  description             String
+  code                    String?  @unique
+  personnelExpenses       Decimal  @db.Decimal(12, 2)
+  generalExpenses         Decimal  @db.Decimal(12, 2)
+  proLabore               Decimal  @db.Decimal(12, 2)
+  depreciation            Decimal  @default(0) @db.Decimal(12, 2)
+  totalCost               Decimal  @db.Decimal(12, 2)
+  considerationPercentage Decimal  @default(100) @db.Decimal(5, 2)
+  salesVolume             Decimal  @db.Decimal(12, 2)
+  overheadPerUnit         Decimal  @db.Decimal(12, 2)
+  calculationDate         DateTime @default(now())
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
-  // Relações
   products Product[]
 
   @@index([calculationDate])

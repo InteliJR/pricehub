@@ -31,8 +31,8 @@ const navItems = [
     allowedRoles: ["ADMIN", "COMERCIAL", "IMPOSTO"],
   },
   {
-    label: "Premissas",
-    path: "/premissas",
+    label: "Impostos",
+    path: "/impostos",
     icon: Landmark,
     allowedRoles: ["ADMIN", "IMPOSTO", "COMERCIAL"],
   },

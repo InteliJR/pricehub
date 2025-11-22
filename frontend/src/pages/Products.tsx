@@ -1,164 +1,249 @@
 // src/pages/Products.tsx
 
-import { useState } from 'react';
-import type { Product } from '@/types';
+import { useState, useEffect } from "react";
+import { toast } from "react-hot-toast";
+import type { Product } from "@/types/products";
+import { PageHeader } from "@/components/features/products/PageHeader";
+import { ProductsTable } from "@/components/features/products/ProductTable";
+import { ProductModal } from "@/components/features/products/ProductModal";
+import { ExportModal } from "@/components/features/products/ExportModal";
+import { ConfirmModal } from "@/components/common/ConfirmModal";
+import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import { Pagination } from "@/components/common/Pagination";
 import {
   useProductsQuery,
-  useCreateProductMutation,
-  useUpdateProductMutation,
   useDeleteProductMutation,
-  mapApiToUi,
-  type CreateProductPayload,
-  type UpdateProductPayload,
-} from '@/api/products';
-import { toast } from 'react-hot-toast';
+  useExportProductsMutation,
+} from "@/api/products";
+import { useDebounce } from "@/hooks/useDebounce";
+import { triggerCsvDownload } from "@/lib/utils";
 
-import { PageHeader } from '@/components/features/products/PageHeader';
-import { ActionBar } from '@/components/features/products/ActionBar';
-import { ViewToggle } from '@/components/features/products/ViewToggle';
-import { ProductTable } from '@/components/features/products/ProductTable';
-import { ProductModal } from '@/components/features/products/ProductModal';
-import { ConfirmModal } from '@/components/common/ConfirmModal';
-import { ProductGrid } from '@/components/features/products/ProductGrid';
-
-
-// Removed mockProducts; data loaded from API
+const EXPORT_COLUMNS = [
+  { key: "code", label: "Código" },
+  { key: "name", label: "Nome" },
+  { key: "description", label: "Descrição" },
+  { key: "productGroup", label: "Grupo de Produto" },
+  { key: "priceWithoutTaxesAndFreight", label: "Preço sem Impostos/Frete" },
+  { key: "priceWithTaxesAndFreight", label: "Preço com Impostos/Frete" },
+  { key: "fixedCost", label: "Custo Fixo" },
+  { key: "rawMaterialsCount", label: "Qtd. Matérias-Primas" },
+];
 
 export default function Products() {
-  const [view, setView] = useState<'table' | 'grid'>('table');
-  const [page] = useState(1);
-  const [limit] = useState(20);
-  const { data, isLoading, isError } = useProductsQuery({ page, limit });
-  const products: Product[] = (data?.data ?? []).map(mapApiToUi);
-  const createMutation = useCreateProductMutation();
-  const updateMutation = useUpdateProductMutation();
-  const deleteMutation = useDeleteProductMutation();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
-  const [selectedProduct, setSelectedProduct] = useState<Product | undefined>(undefined);
-  const [updateId, setUpdateId] = useState<string | null>(null);
+  // Estados
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
+  // Modais
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+
+  // Queries e Mutations
+  const { data, isLoading, isError, isFetching, refetch } = useProductsQuery({
+    page,
+    limit,
+    search,
+    sortBy,
+    sortOrder,
+  });
+
+  const deleteMutation = useDeleteProductMutation();
+  const exportMutation = useExportProductsMutation();
+
+  // Debounce na busca
+  const debouncedSetSearch = useDebounce((value: string) => {
+    setSearch(value);
+    setPage(1);
+  }, 300);
+
+  // Handler para mudança no input
+  const handleSearchChange = (value: string) => {
+    setSearchInput(value);
+    debouncedSetSearch(value);
+  };
+
+  // Refetch quando sortBy ou sortOrder mudam
+  useEffect(() => {
+    refetch();
+  }, [sortBy, sortOrder, refetch]);
+
+  // Handlers
   const handleOpenCreateModal = () => {
-    setSelectedProduct(undefined);
-    setModalMode('create');
+    setEditingProduct(null);
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (product: Product) => {
-    setSelectedProduct(product);
-    setModalMode('edit');
-    setUpdateId(product.id);
+    setEditingProduct(product);
     setIsModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
-    setSelectedProduct(undefined);
+    setEditingProduct(null);
   };
 
-  const handleOpenDeleteModal = (product: Product) => {
-    setSelectedProduct(product);
-    setIsDeleteModalOpen(true);
-  };
+  const handleDelete = async () => {
+    if (!deletingProductId) return;
 
-  const handleCloseDeleteModal = () => {
-    setIsDeleteModalOpen(false);
-    setSelectedProduct(undefined);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!selectedProduct) return;
     try {
-      await deleteMutation.mutateAsync(selectedProduct.id);
-      toast.success('Produto deletado');
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Erro ao deletar');
-    }
-    handleCloseDeleteModal();
-  };
-
-  const handleSubmit = async (formData: FormData) => {
-    const codeRaw = String(formData.get('code') || '').replace(/^#/, '').trim();
-    const name = String(formData.get('description') || '').trim();
-    const description = String(formData.get('description') || '').trim();
-    const fixedCostId = String(formData.get('fixedCostId') || '') || undefined;
-    const rawMaterialsJson = String(formData.get('rawMaterials') || '[]');
-    let rawMaterialsParsed: { rawMaterialId: string; quantity: number }[] = [];
-    try {
-      rawMaterialsParsed = JSON.parse(rawMaterialsJson);
-    } catch {
-      rawMaterialsParsed = [];
-    }
-    // For now, rawMaterials empty array until selector wired.
-    const base: CreateProductPayload = {
-      code: codeRaw,
-      name,
-      description,
-      fixedCostId,
-      rawMaterials: rawMaterialsParsed,
-    };
-    try {
-      if (modalMode === 'create') {
-        if (!base.code || !base.name) {
-          toast.error('Código e Descrição são obrigatórios');
-          return;
-        }
-        await createMutation.mutateAsync(base);
-        toast.success('Produto criado');
-      } else if (modalMode === 'edit' && updateId) {
-        const updatePayload: UpdateProductPayload = {
-          code: base.code,
-          name: base.name,
-          description: base.description,
-          fixedCostId: base.fixedCostId,
-          rawMaterials: base.rawMaterials.length ? base.rawMaterials : undefined,
-        };
-        await updateMutation.mutateAsync({ id: updateId, payload: updatePayload });
-        toast.success('Produto atualizado');
-      }
-      handleCloseModal();
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Erro ao salvar produto');
+      await deleteMutation.mutateAsync(deletingProductId);
+      toast.success("Produto excluído com sucesso");
+      setDeletingProductId(null);
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      toast.error(message || "Erro ao excluir produto");
     }
   };
+
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      const newOrder = sortOrder === "asc" ? "desc" : "asc";
+      setSortOrder(newOrder);
+    } else {
+      setSortBy(column);
+      setSortOrder("asc");
+    }
+  };
+
+  const handleExport = async (options: {
+    limit: number;
+    columns: string[];
+    sortBy: string;
+    sortOrder: "asc" | "desc";
+  }) => {
+    try {
+      const blob = await exportMutation.mutateAsync({
+        format: "csv",
+        limit: options.limit,
+        sortBy: options.sortBy,
+        sortOrder: options.sortOrder,
+        filters: { search },
+      });
+
+      const filename = `produtos-${new Date().toISOString().split("T")[0]}.csv`;
+      triggerCsvDownload(blob, filename);
+      toast.success("CSV exportado com sucesso");
+      setIsExportModalOpen(false);
+    } catch (error) {
+      toast.error("Erro ao exportar CSV");
+    }
+  };
+
+  // Render
+  if (isLoading) {
+    return (
+      <>
+        <PageHeader
+          onNewProductClick={handleOpenCreateModal}
+          onExportClick={() => setIsExportModalOpen(true)}
+          onSearchChange={handleSearchChange}
+          searchValue={searchInput}
+        />
+        <LoadingSpinner size="lg" />
+      </>
+    );
+  }
+
+  if (isError) {
+    return (
+      <>
+        <PageHeader
+          onNewProductClick={handleOpenCreateModal}
+          onExportClick={() => setIsExportModalOpen(true)}
+          onSearchChange={handleSearchChange}
+          searchValue={searchInput}
+        />
+        <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+          <p className="text-red-600 font-semibold">Erro ao carregar produtos</p>
+          <p className="text-sm text-gray-500 mt-2">
+            Tente recarregar a página ou entre em contato com o suporte
+          </p>
+        </div>
+      </>
+    );
+  }
+
+  const hasProducts = data?.data && data.data.length > 0;
 
   return (
     <>
-      <PageHeader />
-      <ActionBar onNewProductClick={handleOpenCreateModal} />
-      <ViewToggle view={view} onChange={setView} />
+      <PageHeader
+        onNewProductClick={handleOpenCreateModal}
+        onExportClick={() => setIsExportModalOpen(true)}
+        onSearchChange={handleSearchChange}
+        searchValue={searchInput}
+      />
 
-      {isLoading && <div className="p-4">Carregando...</div>}
-      {isError && <div className="p-4 text-red-600">Erro ao carregar produtos</div>}
-      {!isLoading && !isError && (
-        view === 'table' ? (
-          <ProductTable
-            products={products}
-            onEditProduct={handleOpenEditModal}
-            onDeleteProduct={handleOpenDeleteModal}
+      {!hasProducts && !search ? (
+        <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+          <p className="text-gray-500">Nenhum produto cadastrado</p>
+          <p className="text-sm text-gray-400 mt-2">
+            Clique em "Novo produto" para começar
+          </p>
+        </div>
+      ) : !hasProducts && search ? (
+        <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+          <p className="text-gray-500">
+            Nenhum resultado encontrado para "{search}"
+          </p>
+        </div>
+      ) : hasProducts ? (
+        <>
+          {isFetching && (
+            <div className="mb-2 text-sm text-blue-600 text-right animate-pulse">
+              🔄 Atualizando...
+            </div>
+          )}
+
+          <ProductsTable
+            products={data.data}
+            onEdit={handleOpenEditModal}
+            onDelete={(id) => setDeletingProductId(id)}
+            onSort={handleSort}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
           />
-        ) : (
-          <ProductGrid products={products} />
-        )
-      )}
 
+          {data.meta && data.meta.totalPages > 1 && (
+            <div className="mb-8">
+              <Pagination
+                currentPage={page}
+                totalPages={data.meta.totalPages}
+                onPageChange={setPage}
+              />
+            </div>
+          )}
+        </>
+      ) : null}
+
+      {/* Modais */}
       <ProductModal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        mode={modalMode}
-        product={selectedProduct}
-        onSubmit={handleSubmit}
-        submitting={createMutation.isPending || updateMutation.isPending || deleteMutation.isPending}
-        // Wrap existing modal to provide a form submit
+        product={editingProduct}
       />
 
       <ConfirmModal
-        isOpen={isDeleteModalOpen}
-        onClose={handleCloseDeleteModal}
-        onConfirm={handleConfirmDelete}
+        isOpen={!!deletingProductId}
+        onClose={() => setDeletingProductId(null)}
+        onConfirm={handleDelete}
         title="Excluir Produto"
-        message="Você tem certeza que deseja excluir esse produto?"
+        message="Tem certeza que deseja excluir este produto? Esta ação não pode ser desfeita."
+        confirmText="Excluir"
+      />
+
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        onConfirm={handleExport}
+        defaultColumns={EXPORT_COLUMNS}
       />
     </>
   );

@@ -9,6 +9,7 @@ export interface ProductGroup {
   volumePercentageByValue: number;
   averagePrice: number;
   createdAt: string;
+  totalValue: number;
   updatedAt: string;
 }
 
